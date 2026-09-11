@@ -219,6 +219,13 @@ Keep configurable thresholds in centralized config files.
 
 ## Testing Rules
 
+Testing is continuous.
+
+Each route-engine milestone must add or update its deterministic tests
+before moving to the next milestone.
+
+Do not defer route-engine tests until the optimizer is complete.
+
 Route-rule changes require tests.
 
 Before changing route logic, read:
@@ -257,7 +264,7 @@ Unless explicitly instructed otherwise, implement in this order:
 8. Candidate route comparison
 9. Explanation generation
 10. Cheapest / recommended / fastest extraction
-11. Unit tests
+11. Integrated route-engine acceptance tests
 12. Basic UI
 13. LocalStorage
 14. Real map API
