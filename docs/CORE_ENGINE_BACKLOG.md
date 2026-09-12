@@ -48,25 +48,20 @@ Status reflects repository implementation, not documentation of future intent.
 
 - CE-00 — **COMPLETE**
 - CE-01 — **COMPLETE**
-- CE-01.1 — **NEXT**
-- CE-02 through CE-21 — **PLANNED**
+- CE-01.1 — **COMPLETE**
+- CE-02 — **NEXT**
+- CE-03 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
 
-Current source still uses:
-
-- `PlanSettings`
-- `OptimizationResult`
-
-CE-01.1 will rename these daily contracts to:
+Current source uses the clarified daily-route contract names:
 
 - `DayPlanSettings`
 - `DayRouteOptimizationResult`
 
-Those target names have not been implemented yet. No concrete multi-day source
-contract, date/time helper, provider, matrix builder, search implementation,
-daily optimizer, or multi-day optimizer exists yet.
+No concrete multi-day source contract, date/time helper, provider, matrix builder,
+search implementation, daily optimizer, or multi-day optimizer exists yet.
 
 ## 5. Module ownership and dependency boundaries
 
@@ -133,7 +128,7 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-01.1 — Clarify daily-route contracts
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-01 and approved documentation migration.
 - **Goal:** Remove daily-versus-multi-day naming ambiguity before CE-02.
 - **Scope:** Rename `PlanSettings` to `DayPlanSettings` and `OptimizationResult` to `DayRouteOptimizationResult`; update current source references only.
@@ -147,7 +142,7 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-02 — Deterministic date/time primitives
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-01.1.
 - **Goal:** Provide strict, deterministic primitives for independent daily time axes and ordered calendar dates.
 - **Scope:** Strict `YYYY-MM-DD` validation, deterministic date comparison/ordering, strict `HH:mm` parsing, `MinuteOfDay` bounds, same-day arithmetic, and explicit overflow/no-wrap results.

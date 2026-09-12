@@ -123,7 +123,7 @@ export type TaxiBudget =
   | Readonly<{ type: "unlimited" }>
   | Readonly<{ type: "capped"; amount: CurrencyAmount }>;
 
-export interface PlanSettings {
+export interface DayPlanSettings {
   readonly date: CalendarDate;
   readonly originLocationId: LocationId;
   readonly earliestStart: MinuteOfDay;
@@ -308,7 +308,7 @@ export type RouteOption = RouteCandidate &
     objectiveLabels: readonly [RouteOptionLabel, ...RouteOptionLabel[]];
   }>;
 
-export type OptimizationResult =
+export type DayRouteOptimizationResult =
   | Readonly<{
       status: "success";
       options: readonly [RouteOption, ...RouteOption[]];
