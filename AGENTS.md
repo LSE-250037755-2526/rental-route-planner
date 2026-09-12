@@ -2,10 +2,12 @@
 
 ## Product
 
-This is a mobile-first rental viewing route planner.
+This is a mobile-first rental viewing planner.
 
 The product helps users turn multiple rental properties, viewing appointments,
-time constraints, and transport choices into an executable viewing schedule.
+available dates, daily availability, time constraints, and transport choices
+into an executable Viewing Plan. A Viewing Plan may use one or more active dates;
+each active date contains exactly one Daily Route.
 
 This product is NOT:
 
@@ -17,63 +19,86 @@ The core value is executable schedule optimization.
 
 ## Source of Truth
 
-Before making product or route-logic changes, read:
+Before making product, route-logic, or planning-logic changes, read:
 
-1. `docs/MVP.md`
-2. `docs/PRD.md`
-3. `docs/ROUTE_ALGORITHM.md`
-4. `docs/TEST_CASES.md`
+1. `AGENTS.md` for engineering governance
+2. `docs/CORE_ENGINE_BACKLOG.md` for the detailed CE implementation ledger
+3. the relevant authoritative documents below
 
-For route optimization logic:
+Document ownership is:
 
-`docs/ROUTE_ALGORITHM.md` is the primary source of truth.
+- `docs/MVP.md` — MVP scope, target user, core value, and product boundaries
+- `docs/PRD.md` — product behavior, inputs, flows, states, conflicts, outputs, and acceptance semantics
+- `docs/ROUTE_ALGORITHM.md` — daily-route and multi-day optimization/domain semantics
+- `docs/TEST_CASES.md` — deterministic acceptance specifications
+- `docs/CORE_ENGINE_BACKLOG.md` — CE status, sequencing, dependencies, tests, gates, and definition of done
+- `AGENTS.md` — engineering governance and mandatory guardrails
 
-For product behavior, fields, page rules, and acceptance criteria:
+The backlog coordinates implementation but does not override product or
+algorithm semantics in the authoritative documents. Detailed CE changes belong
+in the backlog rather than being duplicated across the other documents.
 
-`docs/PRD.md` is the primary source of truth.
+If requirements appear inconsistent, do not silently choose one. Report the
+contradiction before changing behavior.
 
-For scope and priorities:
+## Terminology
 
-`docs/MVP.md` is the primary source of truth.
+- **Viewing Plan / Multi-day Plan** — the complete user plan spanning one or more active dates.
+- **Available Date** — a date supplied by the user as possible.
+- **Active Date / Active Day** — an available date selected by the optimizer for use.
+- **Eligible Day** — an available date on which a property is allowed to be scheduled.
+- **Day Assignment** — assignment of properties to eligible active days.
+- **Daily Route** — the route for exactly one active `CalendarDate`.
+- **Daily Route Optimization** — ordering, mode, and timeline optimization within one date.
+- **Multi-day Planning** — day assignment, daily optimization, aggregation, and whole-plan ranking.
 
-For route-engine acceptance:
-
-`docs/TEST_CASES.md` is the primary source of truth.
-
-If requirements appear inconsistent, do not silently choose one.
-Report the contradiction before changing behavior.
+Use “route” primarily for one Daily Route and “plan” primarily for the aggregate
+Viewing Plan.
 
 ## Product Principles
 
 The main user flow is:
 
 Add properties
-→ Set trip conditions
-→ Generate viewing route
-→ Route center
-→ Start viewing
+→ Set available dates and trip conditions
+→ Generate Viewing Plan
+→ Route Center
+→ Follow each active day's Daily Route
 
-Timeline is the primary information structure.
+The user supplies available dates and availability for each date. The optimizer
+selects which supplied dates become active and may use fewer dates than the user
+provided. It must never silently use an unavailable date. Optional constraints
+such as maximum active days or a finish-by date restrict, but do not replace,
+the optimizer's active-day decision.
 
-Map is secondary and helps users understand spatial distribution.
+Timeline is the primary information structure within each active day. Map is
+secondary and helps users understand spatial distribution.
 
-Input must remain lightweight.
+Input must remain lightweight. Do not introduce unnecessary forms or
+configuration options.
 
-Do not introduce unnecessary forms or configuration options.
-
-Use user-friendly wording in the UI.
-
-Avoid exposing internal algorithm terminology such as:
+Use user-friendly wording in the UI. Avoid exposing internal algorithm
+terminology such as:
 
 - hard constraint
 - lexicographic ranking
 - optimization score
 - route penalty
 
-## Route Optimization Principles
+## Optimization Principles
 
-The route engine does NOT optimize only for shortest distance.
+Multi-day planning and Daily Route Optimization are separate layers:
 
+```text
+available dates and per-date availability
+→ eligible-day derivation
+→ replaceable Day Assignment search
+→ optimize each active day independently
+→ aggregate whole-plan metrics
+→ rank whole-plan candidates
+```
+
+Within a Daily Route, the engine does not optimize only for shortest distance.
 It jointly optimizes:
 
 - property order
@@ -88,200 +113,174 @@ It jointly optimizes:
 
 Never silently:
 
-- move a fixed appointment
+- use a date the user did not supply as available
+- move a fixed appointment to another date or time
+- assign a property outside its eligible days
 - remove a must-visit property
-- exceed taxi budget
+- exceed the applicable taxi budget
 - overwrite an accepted route
 - reorder completed properties
 - fabricate missing travel data
 
-Public transit is the default.
+Public transit is the default. Taxi should only be recommended when it
+materially improves the relevant Daily Route, for example by avoiding lateness,
+avoiding a major transit detour, allowing an additional viewing, or restoring
+must-visit feasibility.
 
-Taxi should only be recommended when it materially improves the whole-day plan,
-for example:
-
-- avoiding lateness
-- avoiding a major public-transit detour
-- allowing an additional viewing
-- restoring feasibility of a must-visit property
-
-Candidate routes must be compared using the hierarchical rules defined in
-`docs/ROUTE_ALGORITHM.md`.
-
-Do not replace these rules with one opaque weighted score.
+Daily candidates and whole-plan candidates must use the hierarchical rules in
+`docs/ROUTE_ALGORITHM.md`. Do not replace those rules with one opaque weighted
+score. Whole-plan policies marked as Decision Gates remain unresolved until the
+backlog says otherwise.
 
 ## Architecture
 
-Route optimization logic must remain independent from React UI.
+Planning and route logic must remain independent from React UI. Do not
+implement optimization directly inside React components.
 
-Do NOT implement route calculation directly inside React components.
-
-Core route logic should live under:
-
-`src/lib/route/`
-
-Suggested structure:
+Responsibility boundaries are mandatory even if exact future filenames evolve:
 
 ```text
 src/lib/route/
-├─ types.ts
-├─ config.ts
-├─ normalizeWindows.ts
-├─ simulateTimeline.ts
-├─ generateOrders.ts
-├─ enumerateModes.ts
-├─ calculateRisk.ts
-├─ rankRoutes.ts
-├─ optimizeRoute.ts
-└─ providers/
-   ├─ TravelTimeProvider.ts
-   └─ MockTravelTimeProvider.ts
+  daily route domain and business rules
+  search/
+    replaceable daily candidate-generation/search strategy
+
+src/lib/plan/
+  future multi-day domain rules and aggregation
+  search/
+    future replaceable Day Assignment search
+
+src/lib/travel/
+  travel acquisition, providers, and TravelMatrix construction
 ```
 
-The UI should consume route-engine outputs rather than reimplement route rules.
+Business/domain rules include date eligibility, normalization, gap feasibility,
+timeline simulation, hard constraints, must-visit preservation, buffers,
+transport-mode legality, budget validity, risk, taxi value, candidate metrics,
+ranking, and explanations.
+
+Search strategy decides which property orders, gap insertions, eligible-day
+assignments, and legal transport-mode combinations to explore. Search may call
+pure rule evaluators, but it must not define domain truth.
+
+Do not hide ranking, risk, explanations, or hard constraints inside DFS or any
+other traversal. DFS/backtracking is an initial replaceable strategy; future
+Branch and Bound, Beam Search, or solver-based search must not require rewriting
+the domain rules.
+
+The V0.1A scenario and performance target is 4–8 properties. This is not a
+product, engine, or validation maximum. Do not hardcode an eight-property limit
+solely from that target. V0.1 product/UI may expose up to three available dates,
+but the domain architecture must not permanently cap plans at three days.
+
+## Time Model
+
+Each Daily Route has exactly one `CalendarDate` and its own same-day time axis:
+
+- `CalendarDate` target format is strict `YYYY-MM-DD`.
+- `ClockTime` target format is strict `HH:mm`.
+- `MinuteOfDay` is an integer from 0 through 1439.
+- Available dates may be non-consecutive.
+- A Daily Route must not silently cross or wrap past midnight.
+- Multi-day planning must not use one cumulative cross-day minute axis.
+- Route logic must not depend on `Date.now()`, locale parsing, or optimizer timezone state.
+
+Current source aliases are not proof that CE-02 validation already exists.
 
 ## Travel Data
 
-The route engine must read from a precomputed travel matrix.
+Travel acquisition is outside the route engine.
 
-Do not call a map API inside route-search loops.
+`src/lib/travel/` should own provider abstractions, mock/real provider behavior,
+travel-data failure handling, and TravelMatrix construction. `src/lib/route/`
+must not import or know about `TravelTimeProvider`.
 
-Use an abstraction such as:
+The Daily Route optimizer consumes a precomputed `TravelMatrix` only. The
+multi-day planner may orchestrate daily optimization with precomputed data, but
+provider calls must not occur inside assignment search, route search,
+simulation, or ranking.
 
-```ts
-interface TravelTimeProvider {
-  getTransitRoute(
-    from: Location,
-    to: Location
-  ): Promise<TransitRoute>;
+V0.1 uses deterministic mock travel data. Real map integration comes later
+without changing optimizer business rules.
 
-  getTaxiRoute(
-    from: Location,
-    to: Location
-  ): Promise<TaxiRoute>;
-}
-```
+## Core Engine Development Scope
 
-V0.1 should use:
+The Core Engine Proof runs through an accepted integrated multi-day optimizer:
 
-`MockTravelTimeProvider`
+daily domain engine
+→ integrated Daily Route optimizer
+→ multi-day planning layer
+→ integrated multi-day optimizer
+→ only then substantial product UI work may be considered
 
-Real map integration should come later without changing the core optimizer.
+The detailed and current CE sequence exists only in
+`docs/CORE_ENGINE_BACKLOG.md`.
 
-## V0.1 Development Scope
+Substantial UI must not begin before CE-21 passes deterministic acceptance and
+review. Passing CE-21 establishes only the earliest allowed point; it does not
+authorize UI work automatically.
 
-Build V0.1 before integrating a real map API.
-
-V0.1 should support:
-
-- manual property input
-- fixed viewing times
-- viewing time windows
-- flexible viewing times
-- must-visit / if-time priority
-- trip start and end time
-- three transport strategies
-- optional taxi budget
-- mock transit and taxi data
-- hard-constraint checking
-- DFS / backtracking candidate generation
-- appointment-gap insertion
-- public-transit risk
-- taxi combination comparison
-- full timeline simulation
-- cheapest / recommended / fastest outputs
-- explanation codes
-- route timeline UI
-- map placeholder
-- LocalStorage persistence
-
-Do not add Supabase or real map APIs until the route engine is stable.
+Real providers/maps, LocalStorage, dynamic rerouting, and Plan B require their
+own later approved scope. Do not begin them as part of the Core Engine Proof.
 
 ## Coding Rules
 
 Use TypeScript.
 
-Prefer strict typing.
+Prefer strict typing. Avoid `any` unless there is a documented reason.
 
-Avoid `any` unless there is a documented reason.
+Prefer small pure functions for domain rules. Keep business logic separate from
+UI components and from replaceable search traversal.
 
-Prefer small pure functions for route logic.
+Do not modify unrelated modules while implementing a task. Do not introduce
+large dependencies without explaining why. Do not use machine learning for
+V0.1 optimization. Keep configurable thresholds in centralized config files.
 
-Keep business logic separate from UI components.
-
-Do not modify unrelated modules while implementing a task.
-
-Do not introduce large dependencies without explaining why.
-
-Do not use machine learning for V0.1 route optimization.
-
-Keep configurable thresholds in centralized config files.
+The current CE-01 source still uses `PlanSettings` and `OptimizationResult`.
+CE-01.1 will rename these daily contracts to `DayPlanSettings` and
+`DayRouteOptimizationResult`. Do not claim or depend on those target names until
+CE-01.1 is implemented. Do not create multi-day source contracts before CE-17.
 
 ## Testing Rules
 
-Testing is continuous.
+Testing is continuous. Each daily and multi-day CE milestone must define or
+update deterministic tests before or alongside implementation and pass them
+before moving on.
 
-Each route-engine milestone must add or update its deterministic tests
-before moving to the next milestone.
+Before changing optimization logic, read `docs/TEST_CASES.md` and the relevant
+entry in `docs/CORE_ENGINE_BACKLOG.md`.
 
-Do not defer route-engine tests until the optimizer is complete.
+Search-strategy refactors must preserve rule-level tests. Replacing traversal
+must not require rewriting expected domain behavior.
 
-Route-rule changes require tests.
-
-Before changing route logic, read:
-
-`docs/TEST_CASES.md`
-
-Important rules must have deterministic test data.
-
-Tests should verify:
+Tests should verify, where relevant:
 
 - route feasibility
-- property order
-- transport mode where relevant
-- taxi budget
+- property order and Day Assignment
+- active dates are a subset of supplied dates
+- fixed appointments stay on their dates
+- transport mode
+- taxi-budget behavior
 - time-window compliance
 - must-visit handling
 - conflict codes
-- reroute behavior
-- explanation codes
+- deterministic per-day timelines
+- explanations and reason codes
 
-Completed properties must never be reordered during rerouting.
-
-Must-visit properties must never be silently removed.
-
-## Implementation Order
-
-Unless explicitly instructed otherwise, implement in this order:
-
-1. Core data models
-2. Time-window normalization
-3. Timeline simulation
-4. Hard constraints
-5. Candidate order generation
-6. Public-transit risk
-7. Transport-mode combinations
-8. Candidate route comparison
-9. Explanation generation
-10. Cheapest / recommended / fastest extraction
-11. Integrated route-engine acceptance tests
-12. Basic UI
-13. LocalStorage
-14. Real map API
-15. Dynamic rerouting
-16. Plan B
-
-Do not start with a visually polished UI before the route engine is testable.
+Case 12 is P1/deferred. Cases 14 and 15 are also deferred from current Core
+Engine completion. Do not add them to CE-14, CE-16, CE-21, or another V0.1A
+completion gate.
 
 ## Change Workflow
 
 Before making a substantial change:
 
-1. Read the relevant documentation.
-2. Explain the planned change.
-3. Identify affected files.
+1. Read `AGENTS.md`, `docs/CORE_ENGINE_BACKLOG.md`, and relevant authoritative documents.
+2. Explain the planned change and identify affected files.
+3. Confirm unresolved Decision Gates are not being silently decided.
 4. Implement the smallest coherent change.
-5. Run relevant tests and linting.
-6. Report what changed and any remaining limitations.
+5. Add or update deterministic tests continuously.
+6. Run relevant tests, lint, TypeScript checking, and `git diff --check`.
+7. Report modified files, rule mappings, uncovered cases, and unrelated-rule preservation.
 
 Do not rewrite large unrelated parts of the project without approval.
