@@ -50,8 +50,9 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-01 — **COMPLETE**
 - CE-01.1 — **COMPLETE**
 - CE-02 — **COMPLETE**
-- CE-03 — **NEXT**
-- CE-04 through CE-21 — **PLANNED**
+- CE-03 — **COMPLETE**
+- CE-04 — **NEXT**
+- CE-05 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
@@ -65,13 +66,27 @@ configuration, and deterministic configuration tests.
 - same-day bounded minute arithmetic;
 - `CalendarDate` comparison and sorting.
 
+`src/lib/route/normalizeWindows.ts` provides deterministic day-scoped
+viewing-time normalization for:
+
+- fixed appointments;
+- `start_between` windows;
+- `finish_before` windows with a duration-derived `latestStart`;
+- flexible inputs using the supplied target-day planning window;
+- neutral unconfirmed inputs;
+- an explicit `not_eligible` result for valid source-date mismatches;
+- malformed input kept distinct from `not_eligible`.
+
+An undated unconfirmed input makes no target-day eligibility claim; Gate E
+remains unresolved.
+
 Current source uses the clarified daily-route contract names:
 
 - `DayPlanSettings`
 - `DayRouteOptimizationResult`
 
-No concrete multi-day source contract, date/time helper, provider, matrix builder,
-search implementation, daily optimizer, or multi-day optimizer exists yet.
+No concrete multi-day source contract, provider, matrix builder, search
+implementation, daily optimizer, or multi-day optimizer exists yet.
 
 ## 5. Module ownership and dependency boundaries
 
@@ -166,7 +181,7 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-03 — Day-scoped time-window normalization
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-02.
 - **Goal:** Normalize viewing-time input for one explicit target date.
 - **Scope:** Fixed/window/flexible/finish-before normalization; recomputation after duration change; distinguish normalized, unconfirmed, and not-eligible-for-target-day results.
@@ -180,7 +195,7 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-04 — Day-route input validation
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-02 and CE-03.
 - **Goal:** Reject malformed daily input without treating valid multi-day product input as invalid.
 - **Scope:** Exactly one target date, daily availability bounds, assigned-property date compatibility, valid durations/settings, one-property validity, and required matrix identities where appropriate.
