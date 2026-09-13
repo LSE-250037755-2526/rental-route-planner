@@ -53,8 +53,9 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-03 — **COMPLETE**
 - CE-04 — **COMPLETE**
 - CE-05 — **COMPLETE**
-- CE-06 — **NEXT**
-- CE-07 through CE-21 — **PLANNED**
+- CE-06 — **COMPLETE**
+- CE-07 — **NEXT**
+- CE-08 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
@@ -125,17 +126,42 @@ is degraded rather than complete. `src/lib/route/` does not depend on
 `TravelTimeProvider`; route optimization consumes a precomputed `TravelMatrix`.
 Gate D remains unresolved.
 
-`MockTravelTimeProvider` and reusable deterministic travel fixtures are not yet
-implemented; both remain CE-06 scope.
+`src/lib/travel/MockTravelTimeProvider.ts`,
+`test/fixtures/travel/results.ts`, and
+`test/fixtures/travel/scenarios.ts` provide:
+
+- deterministic exact directed-pair fixture lookup;
+- explicit result and `provider_failure` fixture responses;
+- duplicate exact-pair rejection, with no symmetric/reverse fallback and no
+  default/fallback result;
+- deterministic copied request history;
+- provider-owned frozen fixture and result data;
+- canonical exact transit/taxi fixture values;
+- explicit transit-only, taxi-only, both-unavailable, degraded, and
+  provider-failure data;
+- reusable directed travel scenarios;
+- generic `buildFixtureTravelMatrix()` reuse of CE-05 `buildTravelMatrix()`;
+- incomplete required fixtures remaining visible as provider failures; and
+- reusable raw travel data for future daily and multi-day tests.
+
+`MockTravelTimeProvider` answers exactly one directed pair at a time and does
+not call `buildTravelMatrix()`. `buildFixtureTravelMatrix()` delegates matrix
+construction to CE-05. A missing fixture is never replaced with default travel
+data; ordinary unavailable data remains distinct from provider failure, and
+taxi-only data remains distinct from both-unavailable data. CE-06 fixtures
+encode travel data, not route decisions. Gate D remains unresolved, and no
+property-count hard cap exists.
+
+No timeline simulation, route feasibility, risk, search, taxi-value, or ranking
+implementation exists yet; those responsibilities remain CE-07 and later.
 
 Current source uses the clarified daily-route contract names:
 
 - `DayPlanSettings`
 - `DayRouteOptimizationResult`
 
-No concrete multi-day source contract, mock provider, reusable deterministic
-travel fixture framework, search implementation, daily optimizer, or multi-day
-optimizer exists yet.
+No concrete multi-day source contract, daily optimizer, or multi-day optimizer
+exists yet.
 
 ## 5. Module ownership and dependency boundaries
 
@@ -272,7 +298,7 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-06 — Deterministic mock provider and matrix fixtures
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-05.
 - **Goal:** Supply deterministic transit/taxi data for every later route and plan test.
 - **Scope:** Mock provider, explicit matrix fixtures, missing/degraded-data fixtures, reusable daily and multi-day scenario builders.
@@ -286,7 +312,7 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-07 — Daily timeline simulation
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-02, CE-03, CE-04, CE-05, CE-06.
 - **Goal:** Simulate a complete same-day route for a supplied order and legal mode sequence.
 - **Scope:** Departure, travel, arrival, waiting, viewing start/end, buffers, estimated end, travel/wait totals, taxi cost/count, and downstream recomputation.
