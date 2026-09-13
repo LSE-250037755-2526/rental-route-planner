@@ -49,11 +49,21 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-00 — **COMPLETE**
 - CE-01 — **COMPLETE**
 - CE-01.1 — **COMPLETE**
-- CE-02 — **NEXT**
-- CE-03 through CE-21 — **PLANNED**
+- CE-02 — **COMPLETE**
+- CE-03 — **NEXT**
+- CE-04 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
+
+`src/lib/route/time.ts` provides deterministic date/time primitives for:
+
+- strict `CalendarDate` validation;
+- strict `ClockTime` validation;
+- `MinuteOfDay` validation;
+- `ClockTime` ↔ `MinuteOfDay` conversion;
+- same-day bounded minute arithmetic;
+- `CalendarDate` comparison and sorting.
 
 Current source uses the clarified daily-route contract names:
 
@@ -142,7 +152,7 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-02 — Deterministic date/time primitives
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-01.1.
 - **Goal:** Provide strict, deterministic primitives for independent daily time axes and ordered calendar dates.
 - **Scope:** Strict `YYYY-MM-DD` validation, deterministic date comparison/ordering, strict `HH:mm` parsing, `MinuteOfDay` bounds, same-day arithmetic, and explicit overflow/no-wrap results.
@@ -156,7 +166,7 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-03 — Day-scoped time-window normalization
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-02.
 - **Goal:** Normalize viewing-time input for one explicit target date.
 - **Scope:** Fixed/window/flexible/finish-before normalization; recomputation after duration change; distinguish normalized, unconfirmed, and not-eligible-for-target-day results.
