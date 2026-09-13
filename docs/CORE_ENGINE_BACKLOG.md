@@ -52,8 +52,9 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-02 — **COMPLETE**
 - CE-03 — **COMPLETE**
 - CE-04 — **COMPLETE**
-- CE-05 — **NEXT**
-- CE-06 through CE-21 — **PLANNED**
+- CE-05 — **COMPLETE**
+- CE-06 — **NEXT**
+- CE-07 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
@@ -94,19 +95,47 @@ validation for one Daily Route, including:
 - no `TravelMatrix` or provider dependency.
 
 One property remains valid Core Engine input. An invalid Daily Route assignment
-does not imply an invalid Multi-day Plan. Travel-matrix and provider work begins
+does not imply an invalid Multi-day Plan. Travel-matrix and provider work began
 in CE-05, not CE-04.
 
 An undated unconfirmed input makes no target-day eligibility claim; Gate E
 remains unresolved.
+
+`src/lib/travel/types.ts`, `src/lib/travel/TravelTimeProvider.ts`, and
+`src/lib/travel/buildTravelMatrix.ts` provide:
+
+- `TravelModeDataStatus` with `available`, `degraded`, and `unavailable` states;
+- independent transit and taxi alternatives;
+- directed `TravelEdge` contracts with derived `complete`, `degraded`, or
+  `unavailable` edge status;
+- explicit `provider_failure` state isolated from ordinary unavailability;
+- a readonly and runtime-frozen `TravelMatrix`;
+- deterministic origin-to-property and property-to-other-property pair
+  coverage and provider-call order;
+- no symmetric-edge assumption;
+- explicit edges for requested-but-unavailable pairs;
+- provider-failure and malformed-payload isolation without fabricated travel
+  values or reverse-edge fallback; and
+- copied provider results that cannot mutate built matrix data.
+
+`TravelMatrix` directionality is explicit: a missing entry means that directed
+pair was not requested, while a requested unavailable pair remains an explicit
+edge. Transit and taxi availability are independent, and taxi-only usable data
+is degraded rather than complete. `src/lib/route/` does not depend on
+`TravelTimeProvider`; route optimization consumes a precomputed `TravelMatrix`.
+Gate D remains unresolved.
+
+`MockTravelTimeProvider` and reusable deterministic travel fixtures are not yet
+implemented; both remain CE-06 scope.
 
 Current source uses the clarified daily-route contract names:
 
 - `DayPlanSettings`
 - `DayRouteOptimizationResult`
 
-No concrete multi-day source contract, provider, matrix builder, search
-implementation, daily optimizer, or multi-day optimizer exists yet.
+No concrete multi-day source contract, mock provider, reusable deterministic
+travel fixture framework, search implementation, daily optimizer, or multi-day
+optimizer exists yet.
 
 ## 5. Module ownership and dependency boundaries
 
@@ -229,7 +258,7 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-05 — Travel-data contracts and matrix builder
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-01.1 and S1 documentation boundary.
 - **Goal:** Define travel acquisition contracts and deterministic matrix construction outside the route engine.
 - **Scope:** Travel provider abstraction, travel edge/matrix contracts, requested node-pair coverage, builder behavior, explicit missing/degraded data, and provider-failure handling at the acquisition boundary.
@@ -243,7 +272,7 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-06 — Deterministic mock provider and matrix fixtures
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-05.
 - **Goal:** Supply deterministic transit/taxi data for every later route and plan test.
 - **Scope:** Mock provider, explicit matrix fixtures, missing/degraded-data fixtures, reusable daily and multi-day scenario builders.
