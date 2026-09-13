@@ -51,8 +51,9 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-01.1 — **COMPLETE**
 - CE-02 — **COMPLETE**
 - CE-03 — **COMPLETE**
-- CE-04 — **NEXT**
-- CE-05 through CE-21 — **PLANNED**
+- CE-04 — **COMPLETE**
+- CE-05 — **NEXT**
+- CE-06 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
@@ -76,6 +77,25 @@ viewing-time normalization for:
 - neutral unconfirmed inputs;
 - an explicit `not_eligible` result for valid source-date mismatches;
 - malformed input kept distinct from `not_eligible`.
+
+`src/lib/route/validateDayRouteInput.ts` provides deterministic structural
+validation for one Daily Route, including:
+
+- exactly one target `CalendarDate` and valid same-day settings/bounds;
+- one-property engine input support, with no property-count hard cap derived
+  from the 4–8 core scenario/performance guidance;
+- address and resolved location identity validation;
+- effective viewing-duration resolution from the configured default;
+- reuse of CE-03 viewing-time validation;
+- explicit daily property-date mismatch detection;
+- neutral flexible and undated-unconfirmed handling;
+- deterministic machine-readable validation issues;
+- no scheduling feasibility evaluation; and
+- no `TravelMatrix` or provider dependency.
+
+One property remains valid Core Engine input. An invalid Daily Route assignment
+does not imply an invalid Multi-day Plan. Travel-matrix and provider work begins
+in CE-05, not CE-04.
 
 An undated unconfirmed input makes no target-day eligibility claim; Gate E
 remains unresolved.
@@ -195,7 +215,7 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-04 — Day-route input validation
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-02 and CE-03.
 - **Goal:** Reject malformed daily input without treating valid multi-day product input as invalid.
 - **Scope:** Exactly one target date, daily availability bounds, assigned-property date compatibility, valid durations/settings, one-property validity, and required matrix identities where appropriate.
@@ -209,7 +229,7 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-05 — Travel-data contracts and matrix builder
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-01.1 and S1 documentation boundary.
 - **Goal:** Define travel acquisition contracts and deterministic matrix construction outside the route engine.
 - **Scope:** Travel provider abstraction, travel edge/matrix contracts, requested node-pair coverage, builder behavior, explicit missing/degraded data, and provider-failure handling at the acquisition boundary.
