@@ -18,10 +18,9 @@
 
 Use “route” for a Daily Route and “plan” for the aggregate Viewing Plan.
 
-The current CE-01 source still names the single-day settings contract
-`PlanSettings` and the single-day result `OptimizationResult`. CE-01.1 will
-rename them to `DayPlanSettings` and `DayRouteOptimizationResult`. Those target
-names do not yet exist in source.
+The current single-day settings and result contracts are `DayPlanSettings` and
+`DayRouteOptimizationResult`. CE-01.1 completed this name-only clarification
+without changing their fields or invariants.
 
 The integrated daily API `optimizeDayRoute()` is a CE-16 target, not a current
 implementation. Concrete multi-day TypeScript contracts and
@@ -33,7 +32,7 @@ implementation. Concrete multi-day TypeScript contracts and
 
 ```text
 properties assigned to exactly one CalendarDate
-+ single-day settings (target name after CE-01.1: DayPlanSettings)
++ single-day settings (DayPlanSettings)
 + precomputed TravelMatrix
 → day-route input validation
 → day-scoped time-window normalization
@@ -166,16 +165,14 @@ start bounds.
 
 ### Single-day settings
 
-Current CE-01 source: `PlanSettings`.
-
-Target name after CE-01.1: `DayPlanSettings`.
+Current source: `DayPlanSettings`.
 
 It represents exactly one date and includes origin, earliest start, latest end,
 transport strategy, taxi-budget state, fixed-appointment buffer, and route
 preferences.
 
-CE-01.1 changes this contract's name only; its current fields and invariants
-remain unchanged.
+CE-01.1 changed this daily contract's name only; its fields and invariants
+remained unchanged.
 
 ### Daily route outputs
 
@@ -186,12 +183,10 @@ Current route-level names remain appropriate:
 - `RouteCandidate`
 - `RouteOption`
 
-Current CE-01 result name: `OptimizationResult`.
+Current source result name: `DayRouteOptimizationResult`.
 
-Target name after CE-01.1: `DayRouteOptimizationResult`.
-
-CE-01.1 changes this result contract's name only; its current fields and
-invariants remain unchanged.
+CE-01.1 changed this daily result contract's name only; its fields and
+invariants remained unchanged.
 
 ### Multi-day contracts
 

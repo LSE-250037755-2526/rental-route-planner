@@ -1552,11 +1552,11 @@ V1.0：真实测试迭代版
 
 当前 `Property` 是已实现的日级路线领域合同，包含身份、地址、可选展示名、可选位置标识、重要程度、时长、可选中介信息和状态等语义。原始看房时间通过结构化的 `viewingTime` 变体表达：固定时间、开始时间范围 / 某时前完成、时间灵活或暂未确认。它不是 `timeType + earliestTime + latestTime` 的扁平原始合同。CE-01已定义标准化结果的类型词汇，但从原始变体产生 earliestStart / latestStart 开始边界的行为要到CE-03才实现。
 
-当前 `PlanSettings` 是已实现的单日路线设置合同，表达一个目标日期的起点、开始/结束边界、交通策略、打车预算状态、固定预约缓冲和路线偏好。CE-01.1将只把该合同重命名为 `DayPlanSettings`，不改变其当前字段或不变量；该重命名尚未发生。
+当前 `DayPlanSettings` 是已实现的单日路线设置合同，表达一个目标日期的起点、开始/结束边界、交通策略、打车预算状态、固定预约缓冲和路线偏好。CE-01.1已完成名称澄清，未改变该单日合同的字段或不变量。
 
 当前 `RouteStop`、`SimulationResult`、`RouteCandidate` 和 `RouteOption` 是已实现的日级输出领域合同。它们分别表达某站的交通/到达/等待/看房/缓冲语义、完整时间轴模拟与汇总、带风险/指标/解释的候选路线，以及用户可见的去重选项。一个 `RouteOption` 通过已验证的 `objectiveLabels` 承载一个或多个目标标签（cheapest / recommended / fastest）；当多个目标得到同一房源顺序和交通模式时，只暴露一个选项。
 
-当前 `OptimizationResult` 是已实现的单日路线结果合同，区分success、partial和failure，并表达日级选项、冲突与已考虑候选数的语义。其精确状态不变量以源类型为准。CE-01.1将只把它重命名为 `DayRouteOptimizationResult`，不改变当前字段或不变量；该重命名尚未发生。
+当前 `DayRouteOptimizationResult` 是已实现的单日路线结果合同，区分success、partial和failure，并表达日级选项、冲突与已考虑候选数的语义。其精确状态不变量以源类型为准。CE-01.1已完成名称澄清，未改变该单日合同的字段或不变量。
 
 交通边和预计算交通矩阵是交通数据层概念，不是当前CE-01源合同。其具体TypeScript结构由CE-05在 `src/lib/travel/` 中定义；当前PRD只要求它们能提供单日优化所需的公共交通/打车时间、费用、换乘、步行与数据状态语义。
 

@@ -141,7 +141,7 @@ Assignment, route search, simulation, or ranking.
 - **Status:** COMPLETE
 - **Prerequisites:** CE-01 and approved documentation migration.
 - **Goal:** Remove daily-versus-multi-day naming ambiguity before CE-02.
-- **Scope:** Rename `PlanSettings` to `DayPlanSettings` and `OptimizationResult` to `DayRouteOptimizationResult`; update current source references only.
+- **Scope:** Rename the historical pre-CE-01.1 daily contract names `PlanSettings` to `DayPlanSettings` and `OptimizationResult` to `DayRouteOptimizationResult`; update current source references only.
 - **Likely ownership:** `src/lib/route/types.ts` and any compile-time references discovered by the task.
 - **Deterministic tests:** Existing tests plus TypeScript compilation; add a focused type test only if needed to make the rename reviewable.
 - **Mapped TEST_CASES:** None; contract naming only.

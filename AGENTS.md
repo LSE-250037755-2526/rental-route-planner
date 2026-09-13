@@ -236,10 +236,10 @@ Do not modify unrelated modules while implementing a task. Do not introduce
 large dependencies without explaining why. Do not use machine learning for
 V0.1 optimization. Keep configurable thresholds in centralized config files.
 
-The current CE-01 source still uses `PlanSettings` and `OptimizationResult`.
-CE-01.1 will rename these daily contracts to `DayPlanSettings` and
-`DayRouteOptimizationResult`. Do not claim or depend on those target names until
-CE-01.1 is implemented. Do not create multi-day source contracts before CE-17.
+Current source uses the daily contracts `DayPlanSettings` and
+`DayRouteOptimizationResult`. CE-01.1 completed this name-only clarification
+without changing their fields or invariants. Do not create multi-day source
+contracts before CE-17.
 
 ## Testing Rules
 
