@@ -54,8 +54,9 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-04 — **COMPLETE**
 - CE-05 — **COMPLETE**
 - CE-06 — **COMPLETE**
-- CE-07 — **NEXT**
-- CE-08 through CE-21 — **PLANNED**
+- CE-07 — **COMPLETE**
+- CE-08 — **NEXT**
+- CE-09 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
@@ -152,8 +153,20 @@ taxi-only data remains distinct from both-unavailable data. CE-06 fixtures
 encode travel data, not route decisions. Gate D remains unresolved, and no
 property-count hard cap exists.
 
-No timeline simulation, route feasibility, risk, search, taxi-value, or ranking
-implementation exists yet; those responsibilities remain CE-07 and later.
+`src/lib/route/simulateTimeline.ts` and
+`test/route/simulateTimeline.test.ts` provide the authoritative pure daily
+timeline simulator and deterministic CE-07 coverage. The implementation uses
+supplied property order, incoming transport modes, normalized properties, and
+a precomputed directed `TravelMatrix` to calculate departure, travel, arrival,
+waiting, viewing start/end, actual fixed buffer, downstream recomputation, and
+mechanical totals. It preserves late-window and fixed-buffer-shortfall evidence,
+accepts usable degraded travel, keeps `latestEnd` enforcement separate from the
+0–1439 representational boundary, and returns runtime-frozen deterministic
+results without mutating inputs.
+
+No route feasibility, constraint/conflict evaluation, risk, search, taxi-value,
+or ranking implementation exists yet; those responsibilities remain CE-08 and
+later. CE-07 contains no provider calls, UI, or multi-day logic.
 
 Current source uses the clarified daily-route contract names:
 
@@ -312,21 +325,21 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-07 — Daily timeline simulation
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-02, CE-03, CE-04, CE-05, CE-06.
 - **Goal:** Simulate a complete same-day route for a supplied order and legal mode sequence.
 - **Scope:** Departure, travel, arrival, waiting, viewing start/end, buffers, estimated end, travel/wait totals, taxi cost/count, and downstream recomputation.
-- **Likely ownership:** `src/lib/route/simulateTimeline.ts`; `test/route/simulateTimeline.test.ts`.
-- **Deterministic tests:** Fixed appointments, windows, waiting, exact totals, downstream changes, 1439 boundary/no-wrap, immutable input.
+- **Implemented ownership:** `src/lib/route/simulateTimeline.ts`; `test/route/simulateTimeline.test.ts`.
+- **Deterministic tests:** 26 CE-07 tests covering fixed appointments, actual fixed buffer, ordinary/flexible/unconfirmed waiting, late-window mechanical visibility, exact travel and taxi totals, degraded/unavailable travel, downstream recomputation, waiting absorption, `latestEnd` non-truncation, the exact 1439 boundary, no midnight wrap, input/output immutability, and repeatability.
 - **Mapped TEST_CASES:** Cases 01–03 and timeline foundations for Cases 06–10.
 - **Decision Gates:** None.
-- **Definition of done:** Full same-day simulation is pure and deterministic; every downstream time is recomputed; no provider calls; all checks pass.
-- **Non-goals:** Feasibility verdicts, risk score, ranking, search.
+- **Definition of done:** Full same-day simulation is pure and deterministic; every downstream time is recomputed; no provider calls; 26 CE-07 tests and 154 total tests across 8 files pass; `npm test`, `npm run lint`, `npx tsc --noEmit`, and `git diff --check` pass.
+- **Non-goals:** Feasibility verdicts, constraint/conflict evaluation, risk, taxi-value logic, ranking, search, provider calls, UI, and multi-day logic; none are implemented in CE-07.
 - **Future-scale notes:** Simulation API must be reusable by any search strategy.
 
 ### CE-08 — Daily constraints, anchors, and conflicts
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-07.
 - **Goal:** Evaluate daily hard constraints and derive time anchors independently from search.
 - **Scope:** Window/appointment/latest-end checks, must-visit preservation, buffer inclusion, travel-data conflicts, anchor derivation, structured violations/conflicts.
