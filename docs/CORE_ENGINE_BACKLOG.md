@@ -55,8 +55,9 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-05 — **COMPLETE**
 - CE-06 — **COMPLETE**
 - CE-07 — **COMPLETE**
-- CE-08 — **NEXT**
-- CE-09 through CE-21 — **PLANNED**
+- CE-08 — **COMPLETE**
+- CE-09 — **NEXT**
+- CE-10 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
@@ -164,9 +165,18 @@ accepts usable degraded travel, keeps `latestEnd` enforcement separate from the
 0–1439 representational boundary, and returns runtime-frozen deterministic
 results without mutating inputs.
 
-No route feasibility, constraint/conflict evaluation, risk, search, taxi-value,
-or ranking implementation exists yet; those responsibilities remain CE-08 and
-later. CE-07 contains no provider calls, UI, or multi-day logic.
+`src/lib/route/evaluateConstraints.ts` and
+`src/lib/route/deriveAnchors.ts` provide CE-08 daily hard-constraint evaluation
+and anchor derivation. They consume the authoritative CE-07 `SimulationResult`
+without recomputing the timeline, enforce fixed appointment timing and required
+buffers, evaluate normalized window/flexible compliance and `latestEnd`, preserve
+must-visit requirements, and report directed selected-mode travel-data conflicts.
+Fixed appointments and configured narrow windows produce deterministic anchors.
+Structured violations, conflicts, and anchors are deterministically ordered,
+immutable, and repeatable.
+
+CE-08 contains no risk calculation, search, gap insertion, mode enumeration,
+taxi-budget enforcement, ranking, provider calls, UI, or multi-day logic.
 
 Current source uses the clarified daily-route contract names:
 
@@ -339,21 +349,21 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-08 — Daily constraints, anchors, and conflicts
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-07.
 - **Goal:** Evaluate daily hard constraints and derive time anchors independently from search.
 - **Scope:** Window/appointment/latest-end checks, must-visit preservation, buffer inclusion, travel-data conflicts, anchor derivation, structured violations/conflicts.
-- **Likely ownership:** `src/lib/route/evaluateConstraints.ts`, `src/lib/route/deriveAnchors.ts`, focused tests.
-- **Deterministic tests:** Conflicting appointments, insufficient travel, must-visit conflict, end-time exceedance, fixed/narrow anchors, risk not misclassified as feasibility.
+- **Implemented ownership:** `src/lib/route/evaluateConstraints.ts`; `src/lib/route/deriveAnchors.ts`; `test/route/evaluateConstraints.test.ts`; `test/route/deriveAnchors.test.ts`.
+- **Deterministic tests:** 39 CE-08 tests covering fixed appointment pass/failure, the exact buffer boundary, late fixed-issue deduplication, conflicting fixed appointments, normalized window/flexible/unconfirmed behavior, `latestEnd`, must-visit preservation, missing/unavailable/degraded/provider-failure travel data, fixed and narrow-window anchors, the inclusive anchor threshold, deterministic issue and anchor ordering, input/output immutability, and repeatability.
 - **Mapped TEST_CASES:** Cases 01–02 and 11; foundations for Case 04.
 - **Decision Gates:** None.
-- **Definition of done:** Rules return structured deterministic outcomes; must-visits are never silently removed; search is not implemented here; all checks pass.
-- **Non-goals:** Candidate enumeration, risk calculation, multi-day conflicts.
+- **Definition of done:** Rules consume the authoritative CE-07 `SimulationResult` and return structured deterministic outcomes; must-visits are never silently removed; 39 CE-08 tests and 193 total repository tests across 10 files pass; `npm test`, `npm run lint`, `npx tsc --noEmit`, and `git diff --check` pass.
+- **Non-goals:** Timeline recomputation, risk calculation, `late_risk` feasibility, candidate search, gap insertion, mode enumeration, taxi-budget enforcement, ranking, provider calls, UI, and multi-day logic; none are implemented in CE-08.
 - **Future-scale notes:** Evaluators remain traversal-agnostic.
 
 ### CE-09 — Daily candidate-order search
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-08.
 - **Goal:** Generate deterministic daily property-order candidates through a replaceable search boundary.
 - **Scope:** Search interface, initial DFS/backtracking traversal, deterministic ordering, pruning by pure constraint/feasibility callbacks, candidate deduplication.
