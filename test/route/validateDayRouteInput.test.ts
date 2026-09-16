@@ -236,13 +236,79 @@ describe("property identity, address, and location validation", () => {
     }
   });
 
-  it("does not invent a duplicate-property-ID rule", () => {
+  it("rejects duplicate property IDs", () => {
     expect(
       validate(createSettings(), [
         createProperty(),
         createProperty({ address: "2 Example Road", locationId: "location-2" }),
       ]),
+    ).toEqual({
+      valid: false,
+      issues: [
+        {
+          code: "duplicate_property_id",
+          scope: "property",
+          propertyIndex: 1,
+          propertyId: "property-1",
+        },
+      ],
+    });
+  });
+
+  it("reports every duplicate after the first in stable property order", () => {
+    expect(
+      validate(createSettings(), [
+        createProperty(),
+        createProperty({ address: "2 Example Road", locationId: "location-2" }),
+        createProperty({ address: "3 Example Road", locationId: "location-3" }),
+      ]),
+    ).toEqual({
+      valid: false,
+      issues: [
+        {
+          code: "duplicate_property_id",
+          scope: "property",
+          propertyIndex: 1,
+          propertyId: "property-1",
+        },
+        {
+          code: "duplicate_property_id",
+          scope: "property",
+          propertyIndex: 2,
+          propertyId: "property-1",
+        },
+      ],
+    });
+  });
+
+  it("uses exact string identity without canonicalizing valid property IDs", () => {
+    expect(
+      validate(createSettings(), [
+        createProperty({ id: "A" }),
+        createProperty({
+          id: " A ",
+          address: "2 Example Road",
+          locationId: "location-2",
+        }),
+      ]),
     ).toEqual({ valid: true, issues: [] });
+  });
+
+  it("does not classify repeated invalid IDs as duplicates", () => {
+    expectIssueCodes(
+      validate(createSettings(), [
+        createProperty({ id: "" }),
+        createProperty({ id: "", address: "2 Example Road" }),
+        createProperty({ id: "   ", address: "3 Example Road" }),
+        createProperty({ id: "   ", address: "4 Example Road" }),
+      ]),
+      [
+        "invalid_property_id",
+        "invalid_property_id",
+        "invalid_property_id",
+        "invalid_property_id",
+      ],
+    );
   });
 
   it("rejects an empty address", () => {

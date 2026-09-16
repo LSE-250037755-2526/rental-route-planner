@@ -31,6 +31,7 @@ export type DayRouteInputValidationIssueCode =
   | "empty_properties"
   | "invalid_property_structure"
   | "invalid_property_id"
+  | "duplicate_property_id"
   | "invalid_property_address"
   | "invalid_property_location_id"
   | "invalid_property_duration"
@@ -265,6 +266,8 @@ export function validateDayRouteInput(
       issues.push({ code: "empty_properties", scope: "properties" });
     }
 
+    const seenPropertyIds = new Set<string>();
+
     input.properties.forEach((property, propertyIndex) => {
       if (!isRecord(property)) {
         issues.push(
@@ -281,6 +284,16 @@ export function validateDayRouteInput(
         issues.push(
           propertyIssue("invalid_property_id", propertyIndex, property.id),
         );
+      } else if (seenPropertyIds.has(property.id)) {
+        issues.push(
+          propertyIssue(
+            "duplicate_property_id",
+            propertyIndex,
+            property.id,
+          ),
+        );
+      } else {
+        seenPropertyIds.add(property.id);
       }
 
       if (!isNonBlankString(property.address)) {

@@ -56,8 +56,9 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-06 — **COMPLETE**
 - CE-07 — **COMPLETE**
 - CE-08 — **COMPLETE**
-- CE-09 — **NEXT**
-- CE-10 through CE-21 — **PLANNED**
+- CE-09 — **COMPLETE**
+- CE-10 — **NEXT**
+- CE-11 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
@@ -96,6 +97,15 @@ validation for one Daily Route, including:
 - deterministic machine-readable validation issues;
 - no scheduling feasibility evaluation; and
 - no `TravelMatrix` or provider dependency.
+
+`PropertyId` is the stable identity used by route and search contracts and must
+be unique within one Daily Route property collection. CE-04 structural
+validation emits `duplicate_property_id` for every valid exact-string duplicate
+after the first occurrence. Invalid or blank IDs are not tracked for duplicate
+detection, and duplicate addresses remain allowed when IDs are distinct. This
+narrow correction was introduced during CE-09 review because
+`DailyPropertyOrder` and future `RouteCandidate.propertyOrder` use
+`PropertyId[]` and therefore require unambiguous identities.
 
 One property remains valid Core Engine input. An invalid Daily Route assignment
 does not imply an invalid Multi-day Plan. Travel-matrix and provider work began
@@ -177,6 +187,31 @@ immutable, and repeatable.
 
 CE-08 contains no risk calculation, search, gap insertion, mode enumeration,
 taxi-budget enforcement, ranking, provider calls, UI, or multi-day logic.
+
+`src/lib/route/search/types.ts`, `src/lib/route/search/dfsOrders.ts`, and
+`test/route/search/dfsOrders.test.ts` provide the replaceable CE-09 daily
+candidate-order search boundary, including:
+
+- `DailyPropertyOrder = readonly PropertyId[]` and
+  `DailyOrderSearchStrategy`;
+- deterministic DFS/backtracking seeded by property input order;
+- preservation of every must property in every emitted candidate;
+- ordered-subset branching for optional `if_time` properties, with no empty
+  candidate emitted for non-empty input;
+- an optional external `canExplorePrefix` callback receiving frozen copies of
+  prefix and remaining identity arrays;
+- pruning of only the rejected prefix and its descendants when the callback
+  returns false;
+- collision-safe deterministic candidate deduplication and frozen outputs; and
+- no property-count hard cap: 4–8 remains scenario/performance guidance only,
+  and Gate C remains unresolved.
+
+CE-09 only determines which `PropertyId` orders to explore. It contains no
+timeline simulation, constraint or appointment/window feasibility
+implementation, anchor/gap insertion, `TravelMatrix` or provider dependency,
+transport-mode enumeration or transit assumption, taxi or taxi-budget logic,
+risk, ranking, option extraction, `RouteCandidate` assembly, UI, or multi-day
+logic.
 
 Current source uses the clarified daily-route contract names:
 
@@ -296,12 +331,12 @@ Assignment, route search, simulation, or ranking.
 - **Status:** COMPLETE
 - **Prerequisites:** CE-02 and CE-03.
 - **Goal:** Reject malformed daily input without treating valid multi-day product input as invalid.
-- **Scope:** Exactly one target date, daily availability bounds, assigned-property date compatibility, valid durations/settings, one-property validity, and required matrix identities where appropriate.
-- **Likely ownership:** `src/lib/route/validateDayRouteInput.ts`; `test/route/validateDayRouteInput.test.ts`.
-- **Deterministic tests:** Mixed dates in one daily call, one valid property, invalid same-day ranges, empty/malformed inputs, no midnight wrap.
+- **Scope:** Exactly one target date, daily availability bounds, assigned-property date compatibility, valid durations/settings, one-property validity, unique exact-string `PropertyId` identities within the Daily Route collection, and required matrix identities where appropriate.
+- **Implemented ownership:** `src/lib/route/validateDayRouteInput.ts`; `test/route/validateDayRouteInput.test.ts`.
+- **Deterministic tests:** 43 CE-04 tests covering mixed dates in one daily call, one valid property, invalid same-day ranges, empty/malformed inputs, no midnight wrap, exact-string duplicate-ID detection after the first valid occurrence, stable multiple-duplicate ordering, invalid IDs excluded from duplicate tracking, duplicate-address allowance for distinct IDs, and no property-count hard cap.
 - **Mapped TEST_CASES:** Case 17; daily boundary used by Cases 18, 22, 24, 25.
 - **Decision Gates:** None; multi-day partial/failure semantics belong to Gate I and CE-17/20.
-- **Definition of done:** A daily call rejects mixed dates locally; multi-date plans are not globally rejected; one-property input remains valid; all checks pass.
+- **Definition of done:** A daily call rejects mixed dates locally; multi-date plans are not globally rejected; one-property input remains valid; `PropertyId[]` route/search identities are structurally unambiguous; all 43 CE-04 tests and repository checks pass.
 - **Non-goals:** Day Assignment, multi-day validation, timeline simulation.
 - **Future-scale notes:** No property-count maximum derived from V0.1A guidance.
 
@@ -363,21 +398,21 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-09 — Daily candidate-order search
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-08.
 - **Goal:** Generate deterministic daily property-order candidates through a replaceable search boundary.
 - **Scope:** Search interface, initial DFS/backtracking traversal, deterministic ordering, pruning by pure constraint/feasibility callbacks, candidate deduplication.
-- **Likely ownership:** `src/lib/route/search/types.ts`, `src/lib/route/search/dfsOrders.ts`, focused search tests.
-- **Deterministic tests:** Candidate coverage on small sets, stable traversal, pruning does not redefine rule outcomes, no hard eight-property validation.
+- **Implemented ownership:** `src/lib/route/search/types.ts`; `src/lib/route/search/dfsOrders.ts`; `test/route/search/dfsOrders.test.ts`.
+- **Deterministic tests:** 23 CE-09 tests covering empty input, one optional, one must, exact two-optional DFS traversal, two must, must plus optional, 15 candidates for three optional properties, 11 candidates for one must plus two optional properties, fixed-order non-prefiltering, Case 01 order foundations, Case 10 alternate-order preservation, Case 11 must preservation, prefix pruning, frozen callback contexts, callback repeatability, collision-safe candidate deduplication, input/output immutability, search repeatability, nine-property no-hard-cap behavior, status neutrality, agent neutrality, and strategy-interface replacement.
 - **Mapped TEST_CASES:** Cases 01, 10, 11; preparation for Case 04.
 - **Decision Gates:** Gate C records future search crossover but does not block V0.1A DFS.
-- **Definition of done:** DFS is replaceable; ranking/risk/explanations are absent from traversal; all checks pass.
-- **Non-goals:** Gap-specific search integration, mode combinations, ranking.
+- **Definition of done:** DFS is replaceable, deterministic, input-order seeded, must-preserving, and produces frozen deduplicated `PropertyId` orders; 23 CE-09 tests and 219 total repository tests across 11 files pass; `npm test`, `npm run lint`, `npx tsc --noEmit`, and `git diff --check` pass.
+- **Non-goals:** Timeline simulation, constraint implementation, appointment/window feasibility, anchor/gap insertion, `TravelMatrix` or provider dependency, transport-mode enumeration, transit assumptions, taxi/taxi-budget logic, risk, ranking, cheapest/recommended/fastest extraction, `RouteCandidate` assembly, UI, and multi-day logic; none are implemented in CE-09.
 - **Future-scale notes:** Strategy interface must support later Branch and Bound, Beam Search, or solver replacement.
 
 ### CE-10 — Daily gap feasibility and insertion-search integration
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-08 and CE-09.
 - **Goal:** Use appointment gaps without collapsing feasibility rules into search.
 - **Scope:** Pure `canFitInGap`-style rule plus search integration deciding which property/gap candidates to attempt.
