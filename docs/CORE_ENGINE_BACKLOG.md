@@ -58,8 +58,9 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-08 — **COMPLETE**
 - CE-09 — **COMPLETE**
 - CE-10 — **COMPLETE**
-- CE-11 — **NEXT**
-- CE-12 through CE-21 — **PLANNED**
+- CE-11 — **COMPLETE**
+- CE-12 — **NEXT**
+- CE-13 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
@@ -250,6 +251,70 @@ constraint evaluation. CE-10 contains no full timeline reconstruction,
 constraint/conflict output, risk, taxi behavior, ranking, option extraction,
 `RouteCandidate` assembly, UI, or multi-day logic. It has no property-count hard
 cap; 4–8 remains scenario/performance guidance and Gate C remains unresolved.
+
+`src/lib/route/calculateRisk.ts` and
+`test/route/calculateRisk.test.ts` provide CE-11 deterministic Daily Route
+public-transit executability risk calculation. `calculateTransitLegRisk()` is
+the pure leg-level rule. It reads all thresholds and points only from
+`ROUTE_ENGINE_CONFIG.transitRisk`: transfer threshold/points, walking
+threshold/points, warning-buffer threshold/points, high-risk-buffer
+threshold/points, and low/medium/high score boundaries. CE-11 duplicates none
+of these thresholds in production code.
+
+For a transit leg, the score is the transfer contribution plus the walking
+contribution plus exactly one applicable buffer contribution. Transfer and
+walking thresholds are inclusive. Buffer thresholds use strict `<` comparison:
+the configured high-risk contribution applies below the high-risk threshold;
+otherwise the configured warning contribution applies below the warning
+threshold. Route integration uses the authoritative CE-07
+`RouteStop.bufferMinutes` without recalculating appointment slack. A null buffer
+adds no buffer points and emits neither `low_buffer` nor `late_risk`.
+
+Risk codes have deterministic order: `multiple_transfers`, `long_walk`,
+`low_buffer`, then `late_risk`. The first two correspond to their configured
+inclusive thresholds. `low_buffer` applies to a numeric buffer below the
+warning threshold, and `late_risk` additionally applies below the high-risk
+threshold without adding points beyond the configured high-risk-buffer
+contribution. `late_risk` is risk data, not a feasibility violation or conflict.
+CE-11 emits neither `complex_transfer`, because no approved configured
+adjustment exists, nor `transit_detour`, whose taxi-value semantics belong to
+CE-13. Existing domain codes remain available for their future owners.
+
+Leg and Daily Route levels use the same centralized configured score boundaries:
+the configured low range, configured medium score, and configured high
+threshold. A selected taxi leg remains represented in route order with zero
+CE-11 public-transit risk, low level, and no codes; CE-11 does not inspect taxi
+duration, cost, or value.
+
+`calculateRouteRisk()` consumes ordered normalized properties, the authoritative
+CE-07 `SimulationResult`, and a precomputed `TravelMatrix`. It validates equal
+property/stop counts and matching property identity at every index, with
+misalignment throwing `RangeError`. Each leg takes its origin, mode, and buffer
+from the CE-07 stop and its destination from the corresponding normalized
+property; it does not reconstruct arrival, waiting, viewing times, or buffer.
+Selected transit uses only the exact directed origin-to-destination edge.
+Available and degraded usable transit are scored identically from supplied
+`transferCount` and `walkMeters`, with no degraded-status surcharge. Missing or
+unavailable selected transit throws `RangeError`, without reverse, taxi, zero,
+or fabricated fallback. Travel-data conflicts remain CE-08 ownership. Selected
+taxi legs require no matrix lookup.
+
+Daily `RouteRisk.score` is the sum of leg scores, `RouteRisk.level` is derived
+from that daily score using the centralized boundaries, and `RouteRisk.legs`
+preserves CE-07 simulation order. This daily scalar is intended to feed the
+later `CandidateMetrics.riskPenalty`; CE-11 does not construct candidate metrics
+or implement CE-14 ranking. An empty aligned route returns frozen zero/low risk
+with no legs. Transit calculator inputs require a non-negative integer transfer
+count, finite non-negative walking distance, and a non-negative integer numeric
+buffer; malformed internal input throws `RangeError`, not a domain conflict.
+Inputs are not mutated; each `LegRisk`, every code array, the legs array, and
+`RouteRisk` are frozen; repeated identical inputs produce deeply equal output
+with stable leg and code order.
+
+CE-11 daily aggregation does not resolve Gate F, which still governs future
+whole-plan/multi-day aggregation choices such as summed daily risk, maximum
+daily risk, worst-leg risk, or another representation across Daily Routes.
+Gate C also remains unresolved.
 
 Current source uses the clarified daily-route contract names:
 
@@ -471,21 +536,29 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-11 — Transit risk
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-07 and centralized CE-01 config.
 - **Goal:** Calculate Daily Route/leg transit risk independently from feasibility and search.
 - **Scope:** Transfers, walking, buffer thresholds, risk codes/levels, candidate risk metric inputs.
-- **Likely ownership:** `src/lib/route/calculateRisk.ts`; `test/route/calculateRisk.test.ts`.
-- **Deterministic tests:** Exact threshold boundaries, low/medium/high results, `late_risk` remains risk rather than violation.
+- **Implemented ownership:** `src/lib/route/calculateRisk.ts`; `test/route/calculateRisk.test.ts`.
+- **Centralized configuration:** `calculateTransitLegRisk()` reads transfer threshold/points, walking threshold/points, warning-buffer threshold/points, high-risk-buffer threshold/points, and low/medium/high score boundaries only from `ROUTE_ENGINE_CONFIG.transitRisk`; no threshold is duplicated in CE-11 production code.
+- **Pure leg rule:** Transit score is transfer contribution plus walking contribution plus exactly one applicable buffer contribution. Transfer and walking thresholds are inclusive. Buffer thresholds are strict: below the configured high-risk threshold receives high-risk buffer points; otherwise below the configured warning threshold receives warning points; otherwise the buffer contribution is zero. A null buffer contributes zero and produces no buffer code. Transit numeric inputs require a non-negative integer transfer count, finite non-negative walking distance, and a non-negative integer numeric buffer; malformed internal input throws `RangeError` rather than producing a domain conflict.
+- **Buffer and risk-code semantics:** Route integration consumes authoritative CE-07 `RouteStop.bufferMinutes` and never recalculates appointment slack. Codes are emitted in stable order: `multiple_transfers` when the transfer threshold is reached or exceeded, `long_walk` when the walking threshold is reached or exceeded, `low_buffer` for a numeric buffer below the warning threshold, and `late_risk` for a numeric buffer below the high-risk threshold. `late_risk` adds no points beyond the high-risk-buffer contribution and remains risk data rather than a violation or conflict. CE-11 emits neither `complex_transfer`, for which no approved configured adjustment exists, nor `transit_detour`, whose taxi-value semantics belong to CE-13.
+- **Levels and taxi legs:** Leg and Daily Route levels derive from the same centralized low range, medium score, and high threshold. CE-11 represents each selected taxi leg as zero score, low level, and no codes without inspecting taxi duration, cost, or value; taxi recommendation/value remains CE-13.
+- **Route input and alignment:** `calculateRouteRisk()` consumes ordered normalized properties, authoritative CE-07 `SimulationResult`, and a precomputed `TravelMatrix`. Stop count must equal property count and each stop property identity must match the property at the same index; misalignment throws `RangeError`. Leg origin, mode, and buffer come from the CE-07 stop, while destination comes from the current normalized property's `locationId`; CE-11 does not reconstruct timeline fields or buffer.
+- **Directed travel and availability:** Selected transit uses only the exact directed origin-to-destination matrix edge. Available and degraded usable transit are scored identically from supplied transfer and walking metrics, with no status surcharge. Missing or unavailable selected transit throws `RangeError`, with no reverse, taxi, zero, or fabricated fallback; CE-08 remains the travel-data conflict owner. Selected taxi legs require no matrix lookup.
+- **Daily aggregation:** Daily `RouteRisk.score` is the sum of leg scores, its level comes from the same configured boundaries, and legs preserve CE-07 simulation order. The scalar score is intended to feed later `CandidateMetrics.riskPenalty`; no candidate metric, `RouteCandidate`, or ranking is created in CE-11. An empty aligned route returns frozen zero/low risk with an empty legs array.
+- **Case 05 foundation:** Reviewed Option A uses transit with two transfers, 900 m walking, and a five-minute buffer, yielding score 5, high level, and `multiple_transfers`, `long_walk`, `low_buffer`, `late_risk`. Option B uses direct transit, walking below the threshold, and a 15-minute buffer, yielding score 0, low level, and no codes. Option A has higher CE-11 risk, but CE-11 does not select or recommend Option B; final preference remains CE-14 scope and integrated Case 05 completion remains CE-14 plus CE-16.
+- **Deterministic tests:** 42 CE-11 tests cover Case 05 risk values; transfer and walking thresholds below/exact/above; warning- and high-risk-buffer exact boundaries; low/medium/high level boundaries; null buffer; taxi zero risk; code order; absence of `complex_transfer` and `transit_detour`; invalid numeric inputs; available and degraded transit; exact directed lookup and no reverse fallback; missing and unavailable selected transit; route aggregation; mixed transit/taxi; taxi without matrix lookup; empty route; count and property-order mismatch; more-than-eight no-hard-cap behavior; input immutability; runtime freezing; repeatability; and `late_risk` remaining risk-only. All 305 repository tests across 14 files pass.
 - **Mapped TEST_CASES:** Case 05.
-- **Decision Gates:** Gate F governs future whole-plan aggregation, not daily calculation.
-- **Definition of done:** Risk is deterministic and config-driven; no search or ranking semantics are embedded; all checks pass.
-- **Non-goals:** Whole-plan risk, candidate ranking, dynamic prediction.
+- **Decision Gates:** Gate F remains unresolved because it governs future whole-plan aggregation across Daily Routes, including sum, maximum daily risk, worst leg, or another representation; CE-11 decides only additive leg risk within one Daily Route. Gate C also remains unresolved, and CE-11 introduces no Decision Gate.
+- **Definition of done:** Risk is deterministic, config-driven, immutable, and independent of feasibility and search. The focused CE-11 Vitest, `npm test`, `npm run lint`, `npx tsc --noEmit`, and `git diff --check` pass.
+- **Non-goals:** Timeline reconstruction; hard feasibility evaluation; `Violation` or `Conflict` generation; candidate search; property-order or transport-mode enumeration; risk-based pruning; candidate ranking; cheapest/recommended/fastest selection; taxi value; taxi-budget enforcement; `RouteCandidate` assembly; option extraction; provider calls; network; UI; storage; multi-day risk aggregation; hard property-count caps; and dynamic prediction. None are implemented in CE-11.
 - **Future-scale notes:** Risk API remains reusable by alternate searches.
 
 ### CE-12 — Transport-mode legality and combination search
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-05, CE-07, CE-08, CE-09.
 - **Goal:** Jointly explore daily order/mode candidates while separating legal truth from enumeration.
 - **Scope:** Pure mode availability/strategy legality rules; replaceable enumeration of legal transit/taxi sequences; transit-first baseline coverage of zero, one, and two taxi legs plus other necessary key combinations.
