@@ -57,8 +57,9 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-07 — **COMPLETE**
 - CE-08 — **COMPLETE**
 - CE-09 — **COMPLETE**
-- CE-10 — **NEXT**
-- CE-11 through CE-21 — **PLANNED**
+- CE-10 — **COMPLETE**
+- CE-11 — **NEXT**
+- CE-12 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
@@ -212,6 +213,43 @@ implementation, anchor/gap insertion, `TravelMatrix` or provider dependency,
 transport-mode enumeration or transit assumption, taxi or taxi-budget logic,
 risk, ranking, option extraction, `RouteCandidate` assembly, UI, or multi-day
 logic.
+
+`src/lib/route/canFitInGap.ts`,
+`src/lib/route/search/gapInsertion.ts`,
+`test/route/canFitInGap.test.ts`, and
+`test/route/search/gapInsertion.test.ts` provide CE-10 daily gap feasibility
+and targeted insertion search. `canFitInGap()` is a pure numeric rule that uses
+same-day bounded arithmetic to calculate optimistic arrival, wait until the
+inserted candidate's normalized `earliestStart`, reject a start after its
+inclusive `latestStart`, add viewing duration, onward travel, and the required
+boundary buffer, and accept an exact final boundary. Arithmetic that crosses
+midnight fails rather than wrapping.
+
+`isGapInsertableProperty()` permits flexible and wide-window properties while
+excluding fixed appointments, CE-08 narrow-window anchors, and unconfirmed
+properties from targeted CE-10 insertion. CE-08 `deriveAnchors()` remains the
+sole narrow-versus-wide classification authority; CE-10 neither recalculates
+nor duplicates the configured threshold and does not redefine general CE-09
+order-search eligibility.
+
+`generateGapInsertionCandidates()` consumes a caller-supplied base order,
+caller-ordered candidate properties, supplied CE-08 anchors, explicit gap
+descriptors, and a synchronous caller-supplied optimistic travel lower-bound
+resolver. It supports before-first-anchor, between-anchor, and after-last-anchor
+attempts; traverses gaps then candidates in supplied order; and emits frozen,
+deduplicated `DailyPropertyOrder` values containing exactly one insertion.
+Anchor boundaries use onward travel, `anchor.latestStart`, and
+`anchor.requiredBufferMinutes`; day-end boundaries use zero onward travel,
+zero buffer, and the supplied `latestEnd`.
+
+CE-10 does not consume `TravelMatrix`, choose transport modes, or establish
+final route feasibility. Missing lower-bound travel skips only the affected
+attempt without zero, reverse, or fabricated fallback. Definitive feasibility
+remains later mode enumeration followed by CE-07 simulation and CE-08
+constraint evaluation. CE-10 contains no full timeline reconstruction,
+constraint/conflict output, risk, taxi behavior, ranking, option extraction,
+`RouteCandidate` assembly, UI, or multi-day logic. It has no property-count hard
+cap; 4–8 remains scenario/performance guidance and Gate C remains unresolved.
 
 Current source uses the clarified daily-route contract names:
 
@@ -412,21 +450,28 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-10 — Daily gap feasibility and insertion-search integration
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-08 and CE-09.
 - **Goal:** Use appointment gaps without collapsing feasibility rules into search.
-- **Scope:** Pure `canFitInGap`-style rule plus search integration deciding which property/gap candidates to attempt.
-- **Likely ownership:** `src/lib/route/canFitInGap.ts`, `src/lib/route/search/gapInsertion.ts`, separate rule and search tests.
-- **Deterministic tests:** Exact fit, one-minute miss, travel-to-next-anchor, buffer inclusion, deterministic candidate insertion.
-- **Mapped TEST_CASES:** Case 04.
-- **Decision Gates:** None.
-- **Definition of done:** Pure feasibility tests pass independently of insertion traversal; inserted candidates do not make the next anchor late; all checks pass.
-- **Non-goals:** Risk-based ranking, modes, whole-plan assignment.
+- **Scope:** Pure numeric `canFitInGap()` rule, anchor-owned insertion eligibility, and deterministic search integration deciding which explicit property/gap attempts to explore.
+- **Implemented ownership:** `src/lib/route/canFitInGap.ts`; `src/lib/route/search/gapInsertion.ts`; `test/route/canFitInGap.test.ts`; `test/route/search/gapInsertion.test.ts`.
+- **Pure gap rule:** Calculate `arrivalAtCandidate = currentEnd + travelToCandidateMinutes`; calculate `candidateViewingStart = max(arrivalAtCandidate, candidateEarliestStart)`; reject when `candidateViewingStart > candidateLatestStart`; calculate `candidateViewingEnd = candidateViewingStart + candidateViewingDurationMinutes`; then require `candidateViewingEnd + travelToNextAnchorMinutes + safetyBufferMinutes <= nextAnchorLatestTime`. All additions are same-day bounded, the candidate and final latest-start boundaries are inclusive, and cross-midnight arithmetic fails rather than wrapping.
+- **Candidate-window semantics:** Gap feasibility consumes the inserted candidate's already-normalized start window, waits until `earliestStart` after an earlier optimistic arrival, and rejects deterministic arrival after `latestStart`. It reuses CE-03/CE-07 timing semantics and does not re-normalize raw input. This behavior was corrected during external review because ignoring candidate waiting could emit an insertion that made the next appointment late.
+- **Insertion eligibility:** `isGapInsertableProperty()` accepts flexible and wide-window targeted insertions and rejects fixed appointments, narrow-window anchors, and unconfirmed properties. CE-08 `deriveAnchors()` is the source of truth for narrow versus wide; CE-10 does not use or duplicate the configured width threshold, and this helper does not redefine general CE-09 order-search eligibility.
+- **Search boundary:** `generateGapInsertionCandidates()` consumes a caller-supplied `DailyPropertyOrder`, caller-ordered candidate properties, supplied CE-08 anchors, explicit gap descriptors, and a synchronous caller-supplied admissible/optimistic travel lower-bound resolver. It returns frozen `DailyPropertyOrder` values only, performs exactly one insertion per emitted order, does not emit the unchanged base order, and traverses supplied gaps before supplied candidates without ranking or sorting.
+- **Gap boundaries:** Anchor boundaries require onward travel and use `anchor.latestStart` with `anchor.requiredBufferMinutes`. Day-end boundaries use zero onward travel, zero buffer, and the supplied daily `latestEnd`. The contracts support before-first-anchor, between-anchor, and after-last-anchor attempts.
+- **Travel lower bounds:** CE-10 imports no `TravelMatrix`, chooses neither transit nor taxi, and receives travel values only from the synchronous resolver. The optimistic/admissible bound determines only whether an order is worth exploring, not final route feasibility. Null travel skips the affected attempt without zero fallback, reverse fallback, or fabrication. Definitive feasibility remains later mode enumeration, CE-07 simulation, and CE-08 constraint evaluation.
+- **Structural search behavior:** `insertionIndex` must be an integer in `0..baseOrder.length`; invalid values throw `RangeError`. A property already in the base order is skipped. Candidate orders use collision-safe deduplication with the first traversal occurrence preserved. Inputs are not mutated, and every output order plus the outer output array is frozen. No hard property-count cap exists; 4–8 remains scenario/performance guidance only.
+- **Deterministic tests:** 18 pure-rule/eligibility tests and 26 search tests, 44 CE-10 tests total. Coverage includes exact fit, one-minute miss, candidate-window waiting failure and exact fit, candidate `latestStart` miss and inclusive boundary, same-day overflow, flexible and wide-window eligibility, fixed/narrow/unconfirmed exclusion, before/between/after insertion, wide-window waiting failure and success, wide-window own-`latestStart` failure, flexible earliest-start waiting, null lower bounds, deterministic resolver invocation and gap-by-candidate traversal, deduplication, already-present-property skipping, status/agent/importance neutrality, more-than-eight no-hard-cap behavior, immutability, freezing, and repeatability.
+- **Mapped TEST_CASES:** Case 04 acceptance foundation, including a genuine prior-anchor/next-anchor between-gap fixture, before/between/after insertion, exact final fit, one-minute final miss, travel to candidate, viewing duration, onward travel, required anchor buffer, narrow-anchor zero buffer, candidate-window waiting, candidate own-latest-start enforcement, and next-appointment non-lateness. Integrated Case 04 completion remains CE-16.
+- **Decision Gates:** None. Gate C remains unresolved and no property-count crossover, search-strategy threshold, or `maxCandidates` policy is introduced.
+- **Definition of done:** Pure feasibility tests pass independently of insertion traversal; inserted candidates respect their own normalized windows and do not make the next boundary late; 44 CE-10 tests and 263 total repository tests across 13 files pass; `npm test`, `npm run lint`, `npx tsc --noEmit`, and `git diff --check` pass.
+- **Non-goals:** Full timeline reconstruction; `SimulationResult` or `RouteStop` construction; `TravelMatrix` or provider dependency; transport-mode enumeration; transit or taxi assumptions; taxi-budget logic; constraint/conflict-result generation; risk; ranking; cheapest/recommended/fastest extraction; `RouteCandidate` assembly; UI; and multi-day logic. Rules define truth; search decides what to explore.
 - **Future-scale notes:** Another search may reuse the same gap evaluator.
 
 ### CE-11 — Transit risk
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-07 and centralized CE-01 config.
 - **Goal:** Calculate Daily Route/leg transit risk independently from feasibility and search.
 - **Scope:** Transfers, walking, buffer thresholds, risk codes/levels, candidate risk metric inputs.
