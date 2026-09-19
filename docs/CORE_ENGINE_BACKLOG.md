@@ -59,8 +59,9 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-09 — **COMPLETE**
 - CE-10 — **COMPLETE**
 - CE-11 — **COMPLETE**
-- CE-12 — **NEXT**
-- CE-13 through CE-21 — **PLANNED**
+- CE-12 — **COMPLETE**
+- CE-13 — **NEXT**
+- CE-14 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
@@ -316,6 +317,85 @@ whole-plan/multi-day aggregation choices such as summed daily risk, maximum
 daily risk, worst-leg risk, or another representation across Daily Routes.
 Gate C also remains unresolved.
 
+`src/lib/route/isModeAllowed.ts`,
+`src/lib/route/search/enumerateModes.ts`,
+`test/route/isModeAllowed.test.ts`, and
+`test/route/search/enumerateModes.test.ts` provide CE-12 transport-mode
+legality and deterministic combination search. Rules define truth and search
+decides what to explore: `isModeAllowed()` exclusively owns mode-specific
+travel-data availability and strategy legality, while
+`enumerateModeSequences()` owns exact directed-leg lookup, traversal, and
+combination enumeration. Search calls the rule and does not restate its
+strategy policy.
+
+The pure legality rule consumes only `TransportStrategy`, `TransportMode`, and
+`TravelModeDataStatus`; it has no matrix, property-order, timeline, taxi-budget,
+taxi-cost, duration, risk, or ranking input. Available and degraded mode data
+are usable subject to strategy, while unavailable mode data is illegal. Transit
+and taxi status are checked independently rather than inferred from aggregate
+`TravelEdge.dataStatus`, and CE-12 adds no degraded surcharge or fallback.
+Usable transit is legal for all three strategies. Usable taxi is illegal in the
+main `transit_only` Daily Route enumeration and legal for `transit_first` and
+`efficiency_first`. Transit-only taxi backup and Plan B remain deferred.
+
+CE-12 does not inspect `TaxiBudget`, taxi cost, budget amount, or
+unset/unlimited/capped policy. CE-13 owns applicable Daily Route taxi-budget
+enforcement and taxi value; Gate B remains unresolved only for future
+multi-day budget scope.
+
+`TransportModeSequence` is `readonly TransportMode[]`.
+`EnumerateModeSequencesInput` supplies a strategy, origin, ordered normalized
+properties, and precomputed `TravelMatrix`.
+`TransportModeCombinationSearchStrategy` is the replaceable search boundary,
+and `exhaustiveModeCombinationSearchStrategy` is the current deterministic
+implementation. For N ordered properties, every complete sequence has exactly
+N modes: the first represents origin to the first property, and each later mode
+represents the preceding ordered property to the current property. No
+return-to-origin leg is added.
+
+Enumeration uses only the exact directed origin-to-destination edge and never
+falls back to its reverse. A missing edge or an edge with no legal mode prevents
+a complete sequence for the supplied order without fabricating data or
+producing a conflict. Transit-only usable data yields transit for every
+strategy. Taxi-only usable data yields no mode for `transit_only` and taxi for
+the two taxi-permitting strategies. With both modes usable, `transit_only`
+yields transit, while `transit_first` and `efficiency_first` traverse transit
+then taxi. Available and degraded alternatives follow identical legality
+semantics.
+
+The current search performs deterministic DFS/backtracking over legs with
+per-leg transit-before-taxi traversal and no post-generation sort by duration,
+cost, risk, taxi count, transfers, or walking. For two dual-usable
+`transit_first` legs it emits, in order, all-transit, transit/taxi,
+taxi/transit, and all-taxi. Zero/one/two taxi legs are baseline coverage rather
+than a universal cap: three dual-usable legs produce all eight legal sequences,
+including the three-taxi sequence. `efficiency_first` may currently enumerate
+the same exhaustive legal space rather than inventing a heuristic difference.
+Future search strategies may traverse differently without changing legality.
+
+An empty ordered-property input returns exactly one frozen empty assignment,
+the combinatorial identity for zero legs; this does not redefine CE-04 Daily
+Route cardinality. CE-12 evaluates one caller-supplied property order at a time
+and neither calls CE-09/CE-10 property-order search nor selects or ranks an
+order. Different orders use their own exact directed legs. CE-16 will
+orchestrate order-by-mode candidate evaluation.
+
+CE-12 preserves both one-leg modes for the Case 06 avoid-lateness foundation,
+preserves choices regardless of the Case 07 duration difference, preserves
+taxi-containing multi-leg sequences for Case 08, provides uncapped Case 09
+combination coverage, and provides independent directed mode spaces for Case
+10 orders. It emits no taxi-value explanation and makes no feasibility or
+ranking decision; remaining behavior stays with CE-13, CE-14, and CE-16 as
+mapped.
+
+CE-12 production calls no timeline, constraint, gap, or risk evaluator and
+does not prune legal choices using duration, transfer count, walking distance,
+risk, taxi value, or budget. Inputs are not mutated, each emitted sequence and
+the outer result are frozen, repeated inputs produce deeply equal results in
+stable order, and exhaustive results contain no duplicates. No property-count
+hard cap or two-taxi cap exists. More than eight legs remain valid; Gate C and
+Gate B remain unresolved.
+
 Current source uses the clarified daily-route contract names:
 
 - `DayPlanSettings`
@@ -558,21 +638,31 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-12 — Transport-mode legality and combination search
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-05, CE-07, CE-08, CE-09.
 - **Goal:** Jointly explore daily order/mode candidates while separating legal truth from enumeration.
 - **Scope:** Pure mode availability/strategy legality rules; replaceable enumeration of legal transit/taxi sequences; transit-first baseline coverage of zero, one, and two taxi legs plus other necessary key combinations.
-- **Likely ownership:** `src/lib/route/isModeAllowed.ts`, `src/lib/route/search/enumerateModes.ts`, separate rule/search tests.
-- **Deterministic tests:** Strategy legality, unavailable mode, baseline combination coverage, mode-dependent order feasibility, deterministic enumeration.
+- **Implemented ownership:** `src/lib/route/isModeAllowed.ts`; `src/lib/route/search/enumerateModes.ts`; `test/route/isModeAllowed.test.ts`; `test/route/search/enumerateModes.test.ts`.
+- **Rule/search separation:** Rules define truth and search decides what to explore. Pure `isModeAllowed()` owns mode-specific availability and strategy legality. `enumerateModeSequences()` owns exact directed-edge lookup, deterministic traversal, and combination enumeration; it calls the rule and does not redefine legality.
+- **Legality input and availability:** `isModeAllowed()` consumes only `TransportStrategy`, `TransportMode`, and `TravelModeDataStatus`, with no matrix, property-order, timeline, taxi-budget, taxi-cost, duration, risk, or ranking input. Available and degraded alternatives are usable subject to strategy; unavailable is illegal. Transit and taxi status are evaluated independently rather than through aggregate edge status, with no degraded surcharge or fallback.
+- **Strategy semantics:** Usable transit is legal under `transit_only`, `transit_first`, and `efficiency_first`. Usable taxi is illegal for the main `transit_only` Daily Route and legal under `transit_first` and `efficiency_first`. Transit-only taxi backup and Plan B are deferred. CE-12 does not inspect or enforce `TaxiBudget`, taxi cost, budget amounts, or unset/unlimited/capped policy; CE-13 owns Daily Route taxi budget and value, while Gate B remains unresolved for future multi-day scope.
+- **Enumeration contracts:** `TransportModeSequence` is `readonly TransportMode[]`. `EnumerateModeSequencesInput` contains strategy, origin, ordered normalized properties, and precomputed `TravelMatrix`. `TransportModeCombinationSearchStrategy` is the replaceable boundary and `exhaustiveModeCombinationSearchStrategy` is the current deterministic implementation.
+- **Leg and direction invariants:** Every complete sequence has one mode per ordered property. Index zero represents origin to the first property; later indices represent the preceding ordered property to the current property; no return leg is added. Search uses the exact directed edge with no reverse fallback. A missing edge or leg with no legal mode yields no complete sequence for that order, without fabrication or conflict generation.
+- **Mode-specific combinations:** Transit-only usable data yields transit under every strategy. Taxi-only usable data yields no mode under `transit_only` and taxi under the two taxi-permitting strategies. Both usable modes yield transit under `transit_only` and transit then taxi under `transit_first` and `efficiency_first`; available and degraded statuses behave identically.
+- **Deterministic traversal:** Exhaustive DFS/backtracking explores transit before taxi per leg and performs no post-generation sorting by duration, cost, risk, taxi count, transfers, or walking. Two dual-usable `transit_first` legs emit exactly `[transit, transit]`, `[transit, taxi]`, `[taxi, transit]`, `[taxi, taxi]`. Three dual-usable legs emit eight sequences including `[taxi, taxi, taxi]`; zero/one/two taxi legs are baseline coverage, not a cap, and no `maxTaxiLegs` or equivalent policy exists. `efficiency_first` may enumerate the same exhaustive space, while future search strategies may traverse the legal space differently without changing truth.
+- **Empty order and supplied-order boundary:** Empty `orderedProperties` returns exactly one frozen empty assignment. This is a combinatorial identity and does not change CE-04 input cardinality. Enumeration consumes one supplied order and calls neither daily order generation nor gap insertion. Different supplied orders use their own directed legs; CE-12 neither selects nor ranks an order, and CE-16 later orchestrates order-by-mode evaluation.
+- **Cases 06–10 foundation:** Case 06 retains both usable one-leg assignments for later avoid-lateness evaluation; Case 07 retains both modes regardless of the 55-versus-18-minute duration difference without emitting `transit_detour`; Case 08 preserves taxi-containing multi-leg sequences for later completion evaluation; Case 09 provides exact two-leg baseline and uncapped three-leg coverage; Case 10 gives different supplied orders their own directed mode spaces without choosing a winner. Taxi value remains CE-13, ranking remains CE-14, and integrated simulation/evaluation remains CE-16.
+- **Immutability and scale:** Inputs are unchanged, every emitted sequence and the outer array are frozen, repeated inputs are deeply equal in identical order, and exhaustive output has no duplicates. No property-count cap exists; the reviewed more-than-eight test uses one legal mode per leg to avoid unnecessary exponential test size. Gate C remains unresolved.
+- **Deterministic tests:** 18 legality tests and 26 enumeration tests, 44 CE-12 tests total. Coverage includes the complete strategy/mode/status matrix; available, degraded, and unavailable data; transit-only, taxi-only, taxi-only degraded, both-unavailable, and provider-failure edges; missing directed edges and no reverse fallback; origin-first, previous-property-later, and no-return semantics; empty and one-property orders; exact two-leg DFS order; eight three-leg combinations and the all-taxi sequence; exhaustive `efficiency_first`; Cases 06–10 foundations; no duration, transfer, walking, risk, or value pruning; more-than-eight no-hard-cap behavior; input immutability; output freezing; repeatability; uniqueness; and the replaceable strategy interface. All 349 repository tests across 16 files pass.
 - **Mapped TEST_CASES:** Cases 06–10.
-- **Decision Gates:** Gate B budget scope is not decided here; use only the applicable daily budget input supplied by the current contract.
-- **Definition of done:** Legality tests pass without enumerator; enumerator never emits illegal modes; zero/one/two is not encoded as a universal hard maximum; all checks pass.
-- **Non-goals:** Taxi value, budget-policy interpretation, ranking.
+- **Decision Gates:** Gate B remains unresolved for future multi-day taxi-budget scope, and Gate C remains unresolved for future search crossover. CE-12 introduces no new gate and interprets no budget policy.
+- **Definition of done:** Legality tests pass independently; exhaustive search invokes legality, emits no illegal modes, and treats zero/one/two taxi legs as baseline rather than a cap. Focused CE-12 Vitest, `npm test`, `npm run lint`, `npx tsc --noEmit`, and `git diff --check` pass.
+- **Non-goals:** Type/config changes; property-order generation; timeline simulation; feasibility pruning; `Violation` or `Conflict` generation; risk calculation; taxi value; taxi-budget enforcement; candidate ranking; cheapest/recommended/fastest selection; `RouteCandidate` assembly; option extraction; provider calls; network; UI; storage; multi-day logic; hard property caps; and a universal two-taxi cap. None are implemented in CE-12.
 - **Future-scale notes:** Large combination spaces may use stronger search without changing legality.
 
 ### CE-13 — Taxi value and budget behavior
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-07, CE-08, CE-11, CE-12.
 - **Goal:** Enforce the applicable daily taxi budget and explain high-value taxi legs.
 - **Scope:** `avoid_late`, `transit_detour`, `unlock_extra_viewing`, configured thresholds, capped/unlimited/unset policy after the task's decision review, budget enforcement.
