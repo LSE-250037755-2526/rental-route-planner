@@ -60,8 +60,9 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-10 — **COMPLETE**
 - CE-11 — **COMPLETE**
 - CE-12 — **COMPLETE**
-- CE-13 — **NEXT**
-- CE-14 through CE-21 — **PLANNED**
+- CE-13 — **COMPLETE**
+- CE-14 — **NEXT**
+- CE-15 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
@@ -396,6 +397,44 @@ stable order, and exhaustive results contain no duplicates. No property-count
 hard cap or two-taxi cap exists. More than eight legs remain valid; Gate C and
 Gate B remain unresolved.
 
+`src/lib/route/evaluateTaxiValue.ts`,
+`src/lib/route/evaluateTaxiBudget.ts`,
+`test/route/evaluateTaxiValue.test.ts`, and
+`test/route/evaluateTaxiBudget.test.ts` provide CE-13 Daily Route taxi-value
+explanations and applicable daily taxi-budget evaluation. The responsibilities
+remain separate: `evaluateTaxiValue()` explains schedule value from
+caller-supplied route evidence, while `evaluateTaxiBudget()` evaluates the
+authoritative taxi spend of an already-simulated Daily Route. A route may retain
+valid taxi-value evidence while independently receiving
+`taxi_budget_exceeded`; CE-13 performs no candidate ranking.
+
+The approved daily budget rule treats `unset` as no explicit Daily Route hard
+cap without rewriting it to `unlimited`; `unlimited` explicitly accepts no
+daily hard cap; and `capped` accepts authoritative
+`simulation.totals.taxiCost` exactly when it is less than or equal to the cap.
+Aggregate daily taxi cost, not per-leg checks, controls validity. This rule is
+Daily Route-only and does not resolve Gate B's future multi-day budget scope.
+
+Taxi-value evaluation consumes aligned caller-supplied `SimulationResult` and
+`ConstraintEvaluation` evidence plus a precomputed directed `TravelMatrix`.
+It performs no internal simulation or constraint reevaluation. It implements
+same-position full-timeline `avoid_late`, centralized-threshold
+`transit_detour`, and causal route-level `unlock_extra_viewing`. Unlock requires
+an optional same-order, already-simulated `candidateTransitCounterfactual` in
+which candidate taxi legs become transit, non-taxi modes and directed origins
+remain unchanged, and relevant appointment/window/end-time timing evidence
+proves the same complete route infeasible without taxi. Missing counterfactual
+evidence, a feasible transit counterfactual, or unrelated hard conflicts do not
+support an unlock claim.
+
+CE-13 returns frozen deterministic outputs without mutating evidence. Its 38
+taxi-value tests and 16 taxi-budget tests provide 54 CE-13 tests; all 403
+repository tests across 18 files pass. CE-13 contains no search, mode
+enumeration, internal simulation, constraint reevaluation, risk or candidate
+ranking, option extraction, `RouteCandidate` assembly, provider calls,
+minutes-per-money scoring, Plan B, UI, storage, network, or multi-day budget
+logic.
+
 Current source uses the clarified daily-route contract names:
 
 - `DayPlanSettings`
@@ -662,21 +701,37 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-13 — Taxi value and budget behavior
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-07, CE-08, CE-11, CE-12.
 - **Goal:** Enforce the applicable daily taxi budget and explain high-value taxi legs.
-- **Scope:** `avoid_late`, `transit_detour`, `unlock_extra_viewing`, configured thresholds, capped/unlimited/unset policy after the task's decision review, budget enforcement.
-- **Likely ownership:** `src/lib/route/evaluateTaxiValue.ts`, `src/lib/route/evaluateTaxiBudget.ts`, focused tests.
-- **Deterministic tests:** Exact threshold boundaries, insufficient cap, unset-state behavior after approval, full-timeline value, no exceedance.
+- **Scope and responsibility separation:** CE-13 contains two independent Daily Route rules. `evaluateTaxiValue()` explains schedule value for caller-supplied taxi-containing route evidence; `evaluateTaxiBudget()` evaluates the applicable taxi budget of an already-simulated Daily Route. Taxi value does not consume budget, budget evaluation does not inspect value reasons, a route may have valid taxi-value evidence while independently receiving `taxi_budget_exceeded`, and neither rule ranks candidates.
+- **Implemented ownership:** `src/lib/route/evaluateTaxiValue.ts`; `src/lib/route/evaluateTaxiBudget.ts`; `test/route/evaluateTaxiValue.test.ts`; `test/route/evaluateTaxiBudget.test.ts`.
+- **Approved daily budget policy:** `TaxiBudget { type: "unset" }` means no explicit Daily Route hard cap, so positive taxi spend is not blocked solely because no budget was entered. `TaxiBudget { type: "unlimited" }` explicitly accepts no Daily Route hard cap. `TaxiBudget { type: "capped", amount }` accepts Daily Route taxi spend iff `taxiCost <= amount`, including exact equality. `unset` and `unlimited` remain semantically distinct and are never normalized into each other.
+- **Budget source and result:** `evaluateTaxiBudget()` reads only `simulation.totals.taxiCost` as authoritative Daily Route spend; it does not recalculate cost from the `TravelMatrix`, stops, taxi-leg count, or estimated fares. The aggregate daily total, rather than independent per-leg comparisons against the full cap, controls validity. Passing returns frozen `hardViolationCount = 0`, `violations = []`, and `conflicts = []`. Capped exceedance returns exactly one error-severity `Violation` and one `Conflict`, both coded `taxi_budget_exceeded`, with route-level `propertyIds = []` and structured `budgetAmount`, `taxiCost`, `exceededBy`, and `budgetType = "capped"` parameters.
+- **Budget internal validation:** `simulation.totals.taxiCost` and a capped amount must be finite and non-negative. Malformed internal calculator evidence throws `RangeError`; CE-13 does not translate it to `invalid_input`, because CE-04 owns source-input validation.
+- **Daily versus multi-day budget boundary:** The approved `unset` behavior applies only to one Daily Route. It does not resolve Gate B, which remains open for whether future multi-day budget is shared across dates, separately capped per day, dynamically allocated, or aggregated another way.
+- **Taxi-value evidence contract:** `TaxiValueRouteEvidence` contains ordered normalized properties, an authoritative CE-07 `SimulationResult`, and a CE-08 `ConstraintEvaluation`. `EvaluateTaxiValueInput` contains reference evidence, candidate evidence, an optional `candidateTransitCounterfactual`, and a precomputed `TravelMatrix`; budget is not an input. `evaluateTaxiValue()` calls neither `simulateTimeline()` nor `evaluateTimelineConstraints()` and instead consumes caller-supplied evidence that CE-16 will later construct and orchestrate.
+- **Evidence alignment:** Every evidence object requires simulation stop count equal to ordered-property count and `simulation.stops[index].propertyId` equal to `orderedProperties[index].id`. Misalignment throws `RangeError`; no ID-based realignment occurs.
+- **Directed matrix and transit availability:** Each selected candidate taxi leg uses only the exact `travelFromLocationId -> candidate property locationId` edge. Missing exact edges and unavailable selected taxi alternatives contradict the already-simulated candidate and throw `RangeError`; no reverse fallback or provider call occurs. If that exact edge's transit alternative is unavailable, CE-13 skips the leg's transit comparison and fabricates no transit duration, minutes saved, `avoid_late`, or `transit_detour` evidence.
+- **Minutes-saved definition:** For a taxi leg with usable transit data, `minutesSaved = transit.durationMinutes - taxi.durationMinutes`. This is direct-leg travel-time saving, not the difference between route end times and not a minutes-per-money score. Leg explanation cost comes from the authoritative candidate stop; route unlock cost comes from candidate simulation totals.
+- **`avoid_late`:** A selected taxi leg requires a same-index reference transit leg with the same property identity and directed origin. Only the property at that index and later reference properties count as downstream. Qualifying reference evidence is `time_window_conflict` or `appointment_conflict` with `lateByMinutes > 0`; a fixed-buffer shortfall with zero lateness is not enough. The candidate must have zero hard violations. The leg-scoped explanation includes `taxiCost`, `minutesSaved`, `lateIssuesAvoided`, and `maximumLateByMinutesAvoided`.
+- **`transit_detour`:** Taxi is not valuable merely for being faster. The time branch requires both centralized `ROUTE_ENGINE_CONFIG.taxiRecommendation.meaningfulTimeSavingMinutes` and `minimumTransitToTaxiDurationRatio` thresholds inclusively. The independent multiple-transfer branch uses the centralized inclusive `ROUTE_ENGINE_CONFIG.transitRisk.transferCountThreshold`. A qualifying leg emits one explanation; if both branches qualify, stable explanation basis uses `time_threshold` before `multiple_transfers`. Production CE-13 duplicates none of these constants.
+- **Unlock counterfactual contract:** `candidateTransitCounterfactual` is optional caller-supplied CE-07/CE-08 evidence and is never generated inside CE-13. When supplied, it must describe the same candidate property count and exact `PropertyId` order, keep identical directed-leg origins, replace every candidate taxi leg with transit, and preserve every non-taxi candidate mode. Any contract violation throws `RangeError`.
+- **Unlock timing causality:** `unlock_extra_viewing` requires the candidate transit counterfactual to be hard-infeasible with at least one relevant `appointment_conflict`, `time_window_conflict`, or `end_time_exceeded`. Unrelated hard issues such as `travel_data_unavailable` do not establish taxi schedule causality. Without `candidateTransitCounterfactual`, CE-13 emits no unlock and does not guess causality, although independently qualifying `avoid_late` and `transit_detour` explanations remain available.
+- **Unlock benefit branches:** The extra-viewing branch requires a fully hard-feasible candidate, a timing-infeasible same-order transit counterfactual, a fully hard-feasible reference, a positive completed-count gain, and at least one candidate taxi leg with usable transit data. The must-restoration branch requires reference `must_visit_unscheduled`, a positive must-completed-count gain, a fully hard-feasible candidate, the same counterfactual timing failure, and a candidate taxi leg with usable transit data. A feasible same-order transit counterfactual suppresses both claims.
+- **Unlock explanation and ordering:** `unlock_extra_viewing` is route-scoped and emitted at most once, with candidate total `taxiCost`, aggregate direct-leg transit-versus-taxi `minutesSaved` over usable taxi comparisons, `completedCountGain`, `mustCompletedCountGain`, and `taxiLegCount`. Earlier finish or lower travel time alone does not qualify. Multiple explanations may coexist in stable candidate route order: `avoid_late` then `transit_detour` for each taxi leg, followed by at most one route-level unlock. This is output stability, not ranking.
+- **Cases 06–09:** Case 06 uses real CE-07 simulation and CE-08 constraints: transit is late, taxi restores hard feasibility, and a sufficient capped budget passes, producing leg-scoped `avoid_late` without selecting a candidate. Case 07's 55-minute transit versus 18-minute taxi produces `transit_detour`; the value remains visible when an insufficient cap separately produces `taxi_budget_exceeded`. Corrected Case 08 compares a feasible shorter all-transit reference with a feasible additional-property taxi candidate and an otherwise identical full-route transit counterfactual that fails daily timing; only that causal comparison produces `unlock_extra_viewing`. A feasible same-order transit counterfactual produces no unlock. The must-restoration variant likewise requires reference `must_visit_unscheduled`, a feasible taxi candidate, and a timing-infeasible same-order transit counterfactual; a feasible counterfactual suppresses the reason. Case 09 covers `unset` and `unlimited` positive spend; cap 60 at 0, 59, 60, and 60.01; cap zero at zero and positive spend; and aggregate multi-taxi CE-07 cost. Zero/one/two taxi legs are not a budget-policy cap.
+- **Immutability and repeatability:** Inputs are not mutated. Taxi-value output freezes the outer explanation array, every explanation, and every parameter object. Taxi-budget output freezes the result, issue arrays, each issue, property-ID arrays, and parameters. Repeated identical inputs produce deeply equal deterministic output and stable explanation order.
+- **Deterministic tests:** 38 taxi-value tests and 16 taxi-budget tests, 54 CE-13 tests total. Coverage includes unset/unlimited; capped zero and below/exact/above cap; aggregate multi-taxi spend; malformed taxi cost and cap; positive/negative and downstream `avoid_late`; buffer-only non-lateness; same-position and candidate-feasibility requirements; config-derived detour minutes/ratio/transfer boundaries; available/degraded and unavailable transit; corrected Case 08 causality and feasible-transit false-positive regression; unrelated-conflict rejection; must-restoration positive/negative cases; counterfactual alignment, exact identity order, directed origins, taxi-to-transit substitution, and non-taxi mode preservation; explanation order; immutability; freezing; and repeatability. All 403 repository tests across 18 files pass; focused CE-13 Vitest, `npm test`, `npm run lint`, `npx tsc --noEmit`, and `git diff --check` pass.
 - **Mapped TEST_CASES:** Cases 06–09.
-- **Decision Gates:** Gate B remains unresolved for multi-day scope; CE-13 must not silently choose whole-plan versus per-day semantics.
-- **Definition of done:** Daily behavior is explicit and tested; taxi is not recommended merely for being faster; all checks pass.
-- **Non-goals:** Whole-plan taxi aggregation, multi-day budget contract, option ranking.
+- **Decision Gates:** Gate B remains unresolved for future multi-day taxi-budget semantics. The approved daily `unset` behavior does not choose whole-plan versus per-day budget scope. Gate C and every other Decision Gate remain unchanged.
+- **Definition of done:** Daily budget semantics are explicit; value and validity are independent; taxi is not recommended merely for speed; completion/must unlocks require causal same-route counterfactual timing evidence; outputs are deterministic and immutable; all recorded checks pass.
+- **Non-goals:** Source type or configuration changes; mode enumeration; order or gap search; production timeline simulation or constraint reevaluation; risk or candidate ranking; cheapest/recommended/fastest selection; option extraction; `RouteCandidate` assembly; provider calls; minutes-per-money scoring; Plan B; UI; storage; network; multi-day budget aggregation; whole-plan taxi budget; and CE-14 implementation. None are implemented in CE-13.
 - **Future-scale notes:** Taxi combination strategy remains replaceable.
 
 ### CE-14 — Daily hierarchical ranking
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-07, CE-08, CE-11, CE-13.
 - **Goal:** Rank Daily Route candidates by the confirmed hierarchy without an opaque weighted score.
 - **Scope:** Deterministic comparison using violations, must/completed totals, risk penalty, travel, taxi cost, and experience penalty; stable tie behavior.
