@@ -61,8 +61,9 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-11 — **COMPLETE**
 - CE-12 — **COMPLETE**
 - CE-13 — **COMPLETE**
-- CE-14 — **NEXT**
-- CE-15 through CE-21 — **PLANNED**
+- CE-14 — **COMPLETE**
+- CE-15 — **NEXT**
+- CE-16 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
@@ -435,6 +436,51 @@ ranking, option extraction, `RouteCandidate` assembly, provider calls,
 minutes-per-money scoring, Plan B, UI, storage, network, or multi-day budget
 logic.
 
+`src/lib/route/rankRoutes.ts` and `test/route/rankRoutes.test.ts` provide CE-14
+deterministic Daily Route ranking for already-constructed `RouteCandidate`
+values. `compareRouteCandidates(left, right)` is a pure deterministic
+comparator: a negative result ranks `left` first, zero means all seven confirmed
+hierarchy metrics are equal, and a positive result ranks `right` first.
+`rankRoutes(candidates)` ranks every supplied candidate without filtering,
+mutation, cloning, candidate assembly, or lower-level evidence recomputation.
+
+Ranking evidence comes only from the existing authoritative fields. CE-14 reads
+`hardViolationCount`, `riskPenalty`, and `experiencePenalty` from
+`candidate.metrics`; it reads `mustCompletedCount`, `completedCount`,
+`totalTravelMinutes`, and `taxiCost` from `candidate.simulation.totals`. It does
+not duplicate these values or derive them again from stops, risks, violations,
+conflicts, travel data, or explanations.
+
+The exact lexicographic hierarchy is fewer hard violations, more must
+completions, more total completions, lower risk penalty, lower total travel
+time, lower taxi cost, and lower experience penalty. A lower-level advantage
+can never compensate for a worse higher-level metric. No weighted, normalized,
+composite, cost-per-minute, minutes-per-currency, or opaque ranking score
+exists.
+
+When all seven fields tie, the comparator returns zero and `rankRoutes()` uses
+original input index only to preserve caller-supplied order. Input index is not
+a metric, domain preference, or eighth business field. Exact ties do not use
+candidate ID, property order, transport modes, status, estimated end,
+waiting time, taxi-leg count, `RouteRisk` metadata, explanations, or
+violation/conflict ordering. Candidate ID lexical order is not policy.
+
+CE-14 validates internal ranking evidence. Count fields must be non-negative
+integers; penalty, time, and cost fields must be finite and non-negative.
+Malformed evidence throws `RangeError` rather than becoming `invalid_input`.
+`rankRoutes()` accepts readonly input, returns a new frozen outer array,
+preserves the original candidate references and stable tie order, and is
+repeatable. Empty input returns a new frozen empty array; one candidate returns
+a new frozen one-element array containing that same reference.
+
+CE-14 contains no candidate generation, search, timeline simulation,
+constraint evaluation, risk recalculation, taxi-value or taxi-budget
+evaluation, candidate assembly, provider or matrix access, option extraction,
+same-agent behavior, UI, storage, network, or multi-day logic. Case 12 remains
+deferred/P1. Its 56 focused tests bring the repository total to 459 tests
+across 19 files; focused Vitest, the full suite, lint, TypeScript checking,
+`git diff --check`, and source-boundary audits pass.
+
 Current source uses the clarified daily-route contract names:
 
 - `DayPlanSettings`
@@ -731,21 +777,42 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-14 — Daily hierarchical ranking
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-07, CE-08, CE-11, CE-13.
-- **Goal:** Rank Daily Route candidates by the confirmed hierarchy without an opaque weighted score.
-- **Scope:** Deterministic comparison using violations, must/completed totals, risk penalty, travel, taxi cost, and experience penalty; stable tie behavior.
-- **Likely ownership:** `src/lib/route/rankRoutes.ts`; `test/route/rankRoutes.test.ts`.
-- **Deterministic tests:** One-field-at-a-time hierarchy, risk versus small time difference, completion versus cost, stable ties.
+- **Goal and responsibility:** Rank already-constructed Daily Route `RouteCandidate` values by the confirmed hierarchy without an opaque weighted score. CE-14 owns only deterministic comparison and ordering; it provides `compareRouteCandidates(left, right)` and `rankRoutes(candidates)`.
+- **Implemented ownership:** `src/lib/route/rankRoutes.ts`; `test/route/rankRoutes.test.ts`.
+- **Authoritative metric sources:** From `candidate.metrics`, CE-14 reads `hardViolationCount`, `riskPenalty`, and `experiencePenalty`. From `candidate.simulation.totals`, it reads `mustCompletedCount`, `completedCount`, `totalTravelMinutes`, and `taxiCost`. It neither duplicates these fields nor recalculates them from lower-level evidence. CE-16 owns candidate assembly and consistency; CE-14 compares the supplied authoritative values without repairing nested inconsistencies.
+- **Exact hierarchy:** Lexicographic comparison applies, in order: (1) `hardViolationCount` ascending; (2) `mustCompletedCount` descending; (3) `completedCount` descending; (4) `riskPenalty` ascending; (5) `totalTravelMinutes` ascending; (6) `taxiCost` ascending; and (7) `experiencePenalty` ascending. A lower-level metric can never compensate for a worse higher-level metric. No weighted, normalized, composite, cost-per-minute, minutes-per-currency, or opaque ranking score exists.
+- **Comparator contract:** `compareRouteCandidates(left, right)` returns a negative number when `left` ranks before `right`, zero when all seven confirmed hierarchy metrics are equal, and a positive number when `right` ranks before `left`. It is pure and deterministic.
+- **Stable ties:** When all seven metrics tie, `compareRouteCandidates()` returns zero. `rankRoutes()` preserves caller-supplied order among tied candidates using original input index only as a stable sorting mechanism. Input index is not a `CandidateMetric`, domain preference, or additional ranking field.
+- **Excluded tie-breaks:** Exact hierarchy ties do not use `candidate.id`, `propertyOrder`, `transportModes`, `status`, `estimatedEndAt`, `totalWaitingMinutes`, `taxiLegCount`, `RouteRisk.score`, `RouteRisk.level`, `RouteRisk.legs`, explanations, violation ordering, or conflict ordering. Candidate ID lexical order is not ranking policy.
+- **Status and eligibility boundary:** CE-14 does not filter supplied candidates. `feasible`, `partial`, and `conflicted` are not separate ranking keys; all supplied candidates enter the hierarchy at `hardViolationCount`. CE-15 owns option eligibility and extraction.
+- **Hard-violation precedence:** Fewer hard violations outrank every lower-level advantage, including more must or total completions, lower risk, faster travel, lower taxi cost, or lower experience penalty.
+- **Must-completion precedence:** When hard violations tie, higher `mustCompletedCount` wins and cannot be overridden by ordinary completion, risk, travel, taxi cost, or experience. This is the CE-14 ranking foundation for Case 11; missing-must detection remains CE-08 ownership.
+- **Total-completion precedence:** When hard violations and must completion tie, higher `completedCount` wins over lower risk, faster travel, lower taxi cost, or lower experience penalty. This is the CE-14 ranking foundation for Case 08; taxi unlock causality remains CE-13 ownership.
+- **Risk precedence:** When the first three fields tie, lower `candidate.metrics.riskPenalty` wins. CE-14 does not recalculate CE-11 risk and does not directly rank by `RouteRisk.level` or `RouteRisk.score`; upstream code must already have converted relevant risk evidence into the authoritative penalty.
+- **Case 05 foundation:** With earlier fields equal, Option A at `riskPenalty = 5` and `totalTravelMinutes = 28` loses to Option B at `riskPenalty = 0` and `totalTravelMinutes = 31`. Three extra travel minutes cannot override lower risk penalty.
+- **Travel-time precedence:** When hard violations, must completions, total completions, and risk tie, lower `totalTravelMinutes` wins ahead of taxi cost and experience penalty. `estimatedEndAt` is not part of the CE-14 recommended hierarchy.
+- **Taxi-cost precedence:** When the first five fields tie, lower `taxiCost` wins. Cost cannot override hard feasibility, must completion, total completion, risk, or travel time.
+- **Experience penalty:** `experiencePenalty` is the final confirmed business field and is considered only after every preceding field ties. CE-14 consumes its numeric value without calculating it from waiting, walking, transfers, backtracking, route preferences, or agent identity.
+- **Case 12 boundary:** Same-agent continuity is not implemented and remains deferred/P1. No agent, agent ID, broker, or contact identity participates in current Daily Route ranking.
+- **Non-ranking simulation totals and explanations:** Differences only in `estimatedEndAt`, `totalWaitingMinutes`, or `taxiLegCount` produce a hierarchy tie. Future CE-15 fastest extraction may use estimated end under its separately confirmed semantics. Explanation codes including `avoid_late`, `transit_detour`, `unlock_extra_viewing`, `lower_transit_risk`, `lower_taxi_cost`, and `earlier_finish` remain evidence, not ranking weights.
+- **Numeric validation:** `hardViolationCount`, `mustCompletedCount`, and `completedCount` must be non-negative integers. `riskPenalty`, `totalTravelMinutes`, `taxiCost`, and `experiencePenalty` must be finite and non-negative. Malformed internal ranking evidence throws `RangeError`; CE-04 remains responsible for source-input validation and CE-14 does not translate such evidence into `invalid_input`.
+- **Collection behavior:** `rankRoutes()` accepts readonly candidate input, ranks every supplied candidate, does not mutate it, returns a new frozen outer array, preserves original candidate references, and preserves input order among exact hierarchy ties. Empty input yields a new frozen empty array. A single candidate yields a new frozen one-element array holding the same reference. Repeated identical inputs produce the same candidate-reference order.
+- **Case 08 foundation:** When hard violations and must completion tie, a candidate completing one additional property ranks first even with higher taxi cost, longer travel, or worse experience penalty. CE-14 does not reevaluate whether taxi caused the gain; causal value remains CE-13 ownership.
+- **Case 11 foundation:** With equal hard violations, higher must completion defeats attractive lower-level metrics. In the realistic missing-must foundation, a candidate with no hard violation defeats one carrying `must_visit_unscheduled`, because hard-violation count is first. CE-14 performs no opportunity-cost analysis.
+- **Comparator algebra and dominance:** Tests cover reflexivity, antisymmetry for non-tied candidates, representative transitivity, repeatability, and every adjacent dominance boundary: hard violations over must completion; must completion over total completion; total completion over risk; risk over travel time; travel time over taxi cost; and taxi cost over experience penalty. Extreme lower-level advantages cannot reverse these boundaries.
+- **Immutability:** Inputs and candidates are not mutated. The returned outer array is new and frozen. Candidates are neither cloned nor modified, their references are preserved, and repeated ranking retains the same reference order.
+- **Deterministic tests:** 56 CE-14 focused tests and 459 repository tests across 19 files. Coverage includes all seven hierarchy fields; every adjacent-level dominance boundary; Cases 05, 08, and 11; exact stable ties; ignored candidate ID, property order, transport modes, estimated end, waiting, taxi-leg count, `RouteRisk` metadata, explanations, and status; comparator reflexivity, antisymmetry, and transitivity; malformed counts and numeric values; single-candidate validation; empty and single input; input immutability; frozen output; reference preservation; and repeatability. Focused CE-14 Vitest, `npm test`, `npm run lint`, `npx tsc --noEmit`, `git diff --check`, and source-boundary audits pass.
 - **Mapped TEST_CASES:** Cases 05, 08, 11. Case 12 is explicitly not mapped as required.
-- **Decision Gates:** None for daily hierarchy; Gates A/F/H apply only to whole-plan ranking.
-- **Definition of done:** Higher-level metrics cannot be overridden; search has no ranking semantics; all checks pass.
-- **Non-goals:** Same-agent preference (Case 12), whole-plan ranking, option extraction.
+- **Decision Gates:** Daily CE-14 hierarchy requires no Decision Gate closure. Gate A remains unresolved for future whole-plan ranking, Gate F remains unresolved for future whole-plan risk aggregation, Gate H remains unresolved for future whole-plan tie behavior, and Gate C remains unresolved for future search crossover.
+- **Definition of done:** Higher-level metrics cannot be overridden; search has no ranking semantics; comparator and collection contracts are deterministic and immutable; all recorded checks pass.
+- **Non-goals:** Type or config changes; candidate generation; order or gap search; mode enumeration; timeline simulation; constraint evaluation; risk recalculation; taxi-value or taxi-budget evaluation; `RouteCandidate` assembly; provider calls; `TravelMatrix` dependency; weighted scoring; cheapest selection; recommended or fastest option extraction; `RouteOption` construction; same-agent behavior; Case 12; whole-plan ranking; multi-day logic; UI; storage; network; and CE-15 implementation. None are implemented in CE-14.
 - **Future-scale notes:** Comparator remains independent from candidate source.
 
 ### CE-15 — Daily cheapest/recommended/fastest extraction
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-14.
 - **Goal:** Extract and deduplicate user-facing Daily Route options.
 - **Scope:** Cheapest, recommended, and fastest selectors; property-order/mode fingerprint; combined objective labels for duplicate routes.
