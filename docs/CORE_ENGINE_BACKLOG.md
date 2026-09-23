@@ -62,8 +62,9 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-12 — **COMPLETE**
 - CE-13 — **COMPLETE**
 - CE-14 — **COMPLETE**
-- CE-15 — **NEXT**
-- CE-16 through CE-21 — **PLANNED**
+- CE-15 — **COMPLETE**
+- CE-16 — **NEXT**
+- CE-17 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
@@ -481,6 +482,33 @@ deferred/P1. Its 56 focused tests bring the repository total to 459 tests
 across 19 files; focused Vitest, the full suite, lint, TypeScript checking,
 `git diff --check`, and source-boundary audits pass.
 
+`src/lib/route/extractRouteOptions.ts` and
+`test/route/extractRouteOptions.test.ts` provide CE-15 deterministic Daily Route
+option extraction. `extractRouteOptions(rankedCandidates)` consumes an already
+CE-14-ranked readonly `RouteCandidate` array and does not call or reproduce
+`compareRouteCandidates()` or `rankRoutes()`. It deduplicates exact
+`propertyOrder` plus `transportModes` identities using collision-safe JSON
+tuple serialization, retains the first ranked occurrence, merges objective
+labels, and constructs frozen user-facing `RouteOption` values.
+
+Recommended is the first unique candidate and need not be feasible. Cheapest
+and Fastest are feasible-only and are restricted to the hard-violation,
+must-completion, and total-completion tier defined by the first feasible unique
+candidate. Risk is not an eligibility barrier inside that tier. Cheapest uses
+minimum taxi cost with ranked-order ties. Fastest uses earliest estimated end,
+then lower travel time, then ranked order. If no feasible candidate exists,
+only the highest-ranked unique candidate is emitted with `recommended`.
+
+Labels have canonical order `recommended`, `cheapest`, `fastest`, while selected
+options remain in CE-14 ranked route order. Empty input produces a new frozen
+empty array. Each option is a new frozen outer object with frozen labels and
+original nested candidate references. CE-15 performs no reranking, search,
+simulation, constraint/risk/taxi reevaluation, candidate assembly, provider or
+matrix access, explanation generation, UI, persistence, or multi-day logic.
+Its 59 focused tests bring the repository total to 518 tests across 20 files;
+focused Vitest, the full suite, lint, TypeScript checking, `git diff --check`,
+and all required source-boundary audits pass.
+
 Current source uses the clarified daily-route contract names:
 
 - `DayPlanSettings`
@@ -812,21 +840,34 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-15 — Daily cheapest/recommended/fastest extraction
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-14.
-- **Goal:** Extract and deduplicate user-facing Daily Route options.
-- **Scope:** Cheapest, recommended, and fastest selectors; property-order/mode fingerprint; combined objective labels for duplicate routes.
-- **Likely ownership:** `src/lib/route/extractRouteOptions.ts`; `test/route/extractRouteOptions.test.ts`.
-- **Deterministic tests:** All labels same, two labels same, distinct options, infeasible candidates excluded as required by current daily contracts.
+- **Goal and responsibility:** Turn already CE-14-ranked Daily Route `RouteCandidate` values into deduplicated user-facing `RouteOption` values. CE-15 owns Recommended, Cheapest, and Fastest extraction; feasible-only Cheapest/Fastest eligibility; the best-feasible completion tier; route fingerprinting; objective-label merging; and `RouteOption` construction. It does not rerank candidates.
+- **Implemented ownership:** `src/lib/route/extractRouteOptions.ts`; `test/route/extractRouteOptions.test.ts`.
+- **Input contract:** `extractRouteOptions(rankedCandidates)` accepts an already CE-14-ranked readonly candidate array. It calls neither `compareRouteCandidates()` nor `rankRoutes()` and does not recreate their hierarchy. CE-16 will later construct and supply the ranked candidates.
+- **Recommended:** Recommended is the first unique candidate after route-identity deduplication in existing CE-14 order. It does not require `status === "feasible"`; when no feasible route exists, the highest-ranked partial or conflicted candidate may be Recommended. Taxi cost, finish time, candidate ID, status, and fingerprint order do not reselect it.
+- **Feasible-only objectives:** Cheapest and Fastest may select only candidates with `status === "feasible"`; partial and conflicted candidates receive neither label. Status remains absent from CE-14 ranking and acts only as a CE-15 objective-eligibility condition.
+- **Best-feasible tier:** The first feasible unique candidate in CE-14 order defines the eligibility tier. Cheapest and Fastest candidates must match its `hardViolationCount`, `mustCompletedCount`, and `completedCount` exactly, preventing cost or speed from sacrificing the hard-feasibility level, must completion, or total completion. `riskPenalty` is not part of this frontier, so a worse-risk candidate in the same feasible tier may win an alternate objective.
+- **No-feasible behavior:** With candidates but no feasible candidate, CE-15 emits exactly the first unique ranked candidate with only `recommended`; it emits no `cheapest` or `fastest` label and does not fabricate feasible objectives from partial or conflicted routes.
+- **Cheapest:** Within the best feasible tier, minimum `simulation.totals.taxiCost` wins. Exact cost ties preserve earlier CE-14 input order. The comparison adds no taxi-leg-count, candidate-ID, risk, experience, or minutes-per-money tie-break.
+- **Fastest:** Within the best feasible tier, lower `simulation.totals.estimatedEndAt` wins; equal end times use lower `simulation.totals.totalTravelMinutes`; an exact tie preserves earlier CE-14 input order. Taxi cost, risk, taxi-leg count, and candidate ID are not additional Fastest tie-breaks.
+- **Route identity and representative:** Deduplication identity is exactly `propertyOrder` plus `transportModes`; candidate ID is irrelevant. Collision-safe JSON tuple serialization avoids delimiter collisions. Candidates are traversed in existing CE-14 order and only the first occurrence of each identity is retained. Later duplicates produce no option, their evidence is not reconciled, and CE-16 owns candidate-construction consistency.
+- **Case 13 and labels:** When Recommended, Cheapest, and Fastest share one route identity, CE-15 returns exactly one option with labels in canonical order: `recommended`, `cheapest`, `fastest`. No duplicate route cards are emitted. Two-label coverage includes Recommended = Cheapest, Recommended = Fastest, and Cheapest = Fastest, with each applicable label present once and in canonical relative order. Label order stabilizes output and does not alter ranking.
+- **Three distinct objectives and output order:** Three distinct objective identities produce three options. All selected options remain in existing CE-14 ranked route order rather than being reordered by label, cost, speed, or candidate ID; Recommended therefore naturally appears first.
+- **Frontier protection:** Tests independently prove that worse `hardViolationCount`, lower `mustCompletedCount`, or lower `completedCount` excludes an otherwise cheaper/faster feasible candidate. Tests also prove that worse risk does not exclude a candidate within the same feasible hard/must/completion tier.
+- **Numeric validation:** `hardViolationCount`, `mustCompletedCount`, and `completedCount` must be non-negative integers. `taxiCost` and `totalTravelMinutes` must be finite and non-negative. `estimatedEndAt` must be an integer `MinuteOfDay` from 0 through 1439. Malformed internal evidence throws `RangeError` rather than becoming `invalid_input`. CE-15 does not revalidate unused CE-14 risk or experience metrics solely for extraction.
+- **Immutability:** The input array, candidates, and nested evidence are not mutated. Each selected option is a new frozen outer object; `objectiveLabels` and the new outer options array are frozen. `simulation`, `metrics`, `risk`, `violations`, `conflicts`, `explanations`, `propertyOrder`, and `transportModes` preserve their original references.
+- **Empty, single, and repeatable behavior:** Empty input returns a new frozen empty option array. One feasible candidate yields one option with all three labels. One partial or conflicted candidate yields one option with `recommended` only. Repeated extraction from identical frozen input returns deeply equal option order, route identities, and label order without randomness, current-time behavior, or locale behavior.
+- **Deterministic tests:** 59 focused CE-15 tests and 518 repository tests across 20 files. Coverage includes empty input; one feasible and one partial candidate; no-feasible Recommended-only behavior; partial Recommended plus feasible objectives; infeasible cheaper/faster exclusion; hard-, must-, and total-completion frontiers; first-feasible frontier when Recommended is partial; worse-risk Cheapest and Fastest eligibility; Cheapest and Fastest differing from Recommended; end-time precedence; travel-time and exact-tie behavior; Case 13; all three two-label shapes; three distinct routes; CE-14 output order; first-duplicate retention; candidate-ID neutrality; mode identity; punctuation-heavy collision cases; malformed counts, taxi/travel values, and end times; unused risk/experience neutrality; nested-reference preservation; immutability; freezing; and repeatability. Focused CE-15 Vitest, `npm test`, `npm run lint`, `npx tsc --noEmit`, `git diff --check`, and all required source-boundary audits pass.
 - **Mapped TEST_CASES:** Case 13.
-- **Decision Gates:** Gate G applies to whole-plan topology only.
-- **Definition of done:** Extraction is deterministic and does not mutate/rerank candidates; duplicates collapse correctly; all checks pass.
-- **Non-goals:** Whole-plan options, UI cards, persistence.
+- **Decision Gates:** Gate G remains unresolved and applies only to future whole-plan option topology. Daily CE-15 extraction does not decide whether the final product exposes one whole plan, three whole-plan objectives, a recommended plan plus daily alternatives, or another topology. Every other Decision Gate remains unchanged.
+- **Definition of done:** Extraction is deterministic, feasible-objective eligibility is explicit, duplicates and labels collapse correctly, candidates are not mutated or reranked, and all recorded checks pass.
+- **Non-goals:** Type or config changes; CE-14 reranking; candidate generation; order or gap search; mode enumeration; timeline simulation; constraint evaluation; risk calculation; taxi-value or taxi-budget evaluation; `RouteCandidate` assembly; provider calls; `TravelMatrix` dependency; explanation generation; weighted scoring; UI; persistence; multi-day behavior; whole-plan options; and CE-16 implementation. None are implemented in CE-15.
 - **Future-scale notes:** Daily option output remains stable beneath future plan orchestration.
 
 ### CE-16 — Integrated optimizeDayRoute()
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-02 through CE-15.
 - **Goal:** Integrate the complete pure-TypeScript Daily Route optimizer over a precomputed matrix.
 - **Scope:** Orchestrate validation, normalization, search, simulation, constraints, modes, risk, taxi rules, ranking, explanations, and daily option extraction.
