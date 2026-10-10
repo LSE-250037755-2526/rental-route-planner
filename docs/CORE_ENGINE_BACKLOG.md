@@ -63,8 +63,9 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-13 — **COMPLETE**
 - CE-14 — **COMPLETE**
 - CE-15 — **COMPLETE**
-- CE-16 — **NEXT**
-- CE-17 through CE-21 — **PLANNED**
+- CE-16 — **COMPLETE**
+- CE-17 — **NEXT**
+- CE-18 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
 configuration, and deterministic configuration tests.
@@ -509,13 +510,35 @@ Its 59 focused tests bring the repository total to 518 tests across 20 files;
 focused Vitest, the full suite, lint, TypeScript checking, `git diff --check`,
 and all required source-boundary audits pass.
 
+`src/lib/route/optimizeDayRoute.ts` and
+`test/route/optimizeDayRoute.test.ts` provide the accepted CE-16 integrated
+Daily Route optimizer. `optimizeDayRoute(input: OptimizeDayRouteInput)` returns
+`DayRouteOptimizationResult` and synchronously and deterministically composes the
+accepted CE-03 through CE-15 daily units over caller-supplied `DayPlanSettings`,
+`readonly Property[]`, and a precomputed `TravelMatrix`. It owns integrated
+Daily Route orchestration, `RouteCandidate` assembly, and
+`DayRouteOptimizationResult` assembly without provider, matrix-construction,
+network, browser, UI, or storage access.
+
+The implemented pipeline is CE-04 validation → CE-03 normalization → CE-09
+exhaustive Daily Order search → CE-12 mode enumeration → CE-07 simulation →
+CE-08 timeline and travel-data constraints → CE-13 taxi-budget evaluation →
+CE-11 route risk → preliminary candidates and CE-14 ranking → taxi reference,
+counterfactual, and CE-13 explanation evaluation → final candidate assembly →
+final CE-14 ranking → CE-15 option extraction → daily result assembly. Its 25
+focused tests bring the repository total to 543 tests across 21 files and cover
+Cases 01–11, 13, 16, and 17 plus validation, partial results, hard-evidence
+merging, overflow, candidate count, immutability, and repeatability. Focused
+Vitest, the full suite, lint, TypeScript checking, `git diff --check`, and all
+required source-boundary audits pass.
+
 Current source uses the clarified daily-route contract names:
 
 - `DayPlanSettings`
 - `DayRouteOptimizationResult`
 
-No concrete multi-day source contract, daily optimizer, or multi-day optimizer
-exists yet.
+No concrete multi-day source contract or multi-day optimizer exists yet. The
+integrated daily optimizer now exists through accepted CE-16.
 
 ## 5. Module ownership and dependency boundaries
 
@@ -867,11 +890,13 @@ Assignment, route search, simulation, or ranking.
 
 ### CE-16 — Integrated optimizeDayRoute()
 
-- **Status:** NEXT
+- **Status:** COMPLETE
 - **Prerequisites:** CE-02 through CE-15.
 - **Goal:** Integrate the complete pure-TypeScript Daily Route optimizer over a precomputed matrix.
 - **Scope:** Orchestrate validation, normalization, search, simulation, constraints, modes, risk, taxi rules, ranking, explanations, and daily option extraction.
-- **Likely ownership:** `src/lib/route/optimizeDayRoute.ts`; integrated daily tests.
+- **Implemented ownership:** `src/lib/route/optimizeDayRoute.ts`; `test/route/optimizeDayRoute.test.ts`. CE-16 owns integrated Daily Route orchestration, `RouteCandidate` assembly, and `DayRouteOptimizationResult` assembly.
+- **Public API and boundary:** `optimizeDayRoute(input: OptimizeDayRouteInput): DayRouteOptimizationResult` accepts `settings: DayPlanSettings`, `properties: readonly Property[]`, and `travelMatrix: TravelMatrix`. It is synchronous, pure, deterministic, provider-independent, network-independent, and browser/UI/storage-independent. It consumes only the supplied precomputed matrix and performs no travel acquisition or matrix construction.
+- **Integrated pipeline:** CE-04 validation → CE-03 normalization → CE-09 exhaustive Daily Order search → CE-12 mode enumeration → CE-07 full simulation → CE-08 timeline constraints → CE-08 travel-data constraints → CE-13 taxi-budget evaluation → CE-11 route risk → preliminary candidates with empty explanations → preliminary CE-14 ranking → taxi reference/counterfactual construction → CE-13 taxi-value explanations → final `RouteCandidate` assembly → final CE-14 ranking → CE-15 option extraction → `DayRouteOptimizationResult` assembly. CE-16 duplicates none of the lower-level business rules and evaluates property order × legal transport mode jointly.
 - **Risk-penalty assembly:** Set `candidate.metrics.riskPenalty = candidate.risk.score`, where `candidate.risk` is the authoritative CE-11 `calculateRouteRisk()` output. CE-16 introduces no second mapping, weighting, normalization, or risk-level conversion.
 - **Neutral experience penalty:** Set `candidate.metrics.experiencePenalty = 0` for every current V0.1A candidate because no accepted experience-penalty calculator exists. CE-16 must not derive it from waiting, walking, transfers, route preferences, backtracking, taxi count, `agentName`, same-agent continuity, estimated finish, or risk. Future experience semantics require a separate reviewed change.
 - **Candidate-status assembly:** Current V0.1A CE-16 emits only `feasible` and `conflicted`. A merged `hardViolationCount` of zero produces `status = "feasible"` with empty violations and conflicts. A positive merged count produces `status = "conflicted"` with non-empty violations and the merged hard conflicts. CE-16 does not emit `status = "partial"`; that public union variant remains unchanged for compatibility and future use.
@@ -879,28 +904,36 @@ Assignment, route search, simulation, or ranking.
 - **Validation-failure mapping:** Call CE-04 validation before normalization or search. An invalid result produces `failure`, frozen empty options, and `consideredCandidateCount = 0`. Map every validation issue in existing issue order to one frozen `invalid_input` `Conflict`: `propertyIds` is `[issue.propertyId]` only for a property-scoped issue that exposes `propertyId`, and otherwise is empty; parameters contain `validationCode`, `scope`, and `propertyIndex` only when present. Do not collapse multiple validation issues. Freeze property-ID arrays, parameter objects, the conflict array, and the result.
 - **Normalized display name:** Assemble `NormalizedProperty.displayName` as `property.displayName ?? property.address`. Do not trim, rewrite, title-case, geocode, or otherwise synthesize it.
 - **Hard-evidence merge:** For every fully simulated candidate, merge evaluations in exact order: (1) `evaluateTimelineConstraints()`, (2) `evaluateTravelDataConstraints()`, and (3) `evaluateTaxiBudget()`. Perform no semantic deduplication. The authoritative `hardViolationCount` is the sum of the three evaluator counts; violations and conflicts are concatenated in the same evaluator order. CE-16 does not reinterpret or merge issue identities.
+- **Candidate and result immutability:** CE-16 runtime-freezes its newly owned normalized collection, merged violation/conflict arrays, candidate metrics, candidate objects, validation conflicts, result collections, and result objects according to repository conventions. It preserves accepted frozen lower-level references where practical and mutates neither input nor lower-level output.
 - **CE-09 / CE-10 integration boundary:** The exhaustive CE-09 Daily Order search is the V0.1A integrated property-order search space. CE-16 need not invoke CE-10 `generateGapInsertionCandidates()` as another expansion stage because CE-09 already explores ordered subsets containing the same insertable placements. CE-10 remains an accepted targeted-search helper for future stronger or pruned strategies. Integrated Case 04 is behavioral: the between-anchor order must be explored, mode-enumerated, simulated, and constraint-evaluated, but need not result from a production CE-10 helper call. Gate C remains unresolved.
 - **Taxi-value evidence roles:** `candidate`, `reference`, and `candidateTransitCounterfactual` are distinct and are not interchangeable. The candidate is the taxi-containing route being explained. The reference is a separately selected comparison route and must not automatically equal the counterfactual. The optional counterfactual preserves the candidate's exact property order and directed origins, replaces every taxi leg with transit, preserves every non-taxi mode, and is used only for same-route taxi causality such as `unlock_extra_viewing`.
 - **Two-phase reference selection:** First assemble every candidate's route evidence and ranking fields with frozen empty explanations, then use CE-14 `rankRoutes()` to obtain the deterministic preliminary order. For each taxi-containing candidate, choose as its reference the first candidate in that ranked set whose `transportModes` contain no taxi legs. The reference may have a different property order, fewer properties, and either feasible or conflicted CE-08 evidence; it need not share the taxi candidate's route fingerprint. If no all-transit candidate exists, use the taxi candidate's own aligned evidence as reference. That fallback permits independently valid `transit_detour` evidence but invents neither `avoid_late` nor unlock causality. Non-taxi candidates may retain empty explanations without taxi-value evaluation.
 - **Case 08 reference/counterfactual distinction:** Case 08 requires a feasible shorter all-transit reference, a feasible extra-property taxi candidate, and a timing-infeasible same-order full-transit counterfactual. The reference establishes `completedCountGain` and `mustCompletedCountGain`; the counterfactual establishes whether taxi causally makes the same complete route schedulable. A transit counterfactual must therefore never replace the reference merely because both use transit.
 - **Taxi-value counterfactual construction:** For each taxi candidate, attempt the exact same-order substitution: keep the candidate property order unchanged, replace candidate taxi legs with transit, preserve non-taxi candidate modes and directed origins, and require every substituted transit alternative to be usable. If constructible, fully simulate it, evaluate it with CE-08 timeline constraints, and supply it as `candidateTransitCounterfactual`; otherwise omit it. Never fabricate transit.
 - **Taxi-value constraints and final assembly:** Every `TaxiValueRouteEvidence.constraints` value for the candidate, reference, and optional counterfactual is CE-08 timeline `ConstraintEvaluation` evidence only. Do not merge CE-13 taxi-budget evidence into taxi-value evidence: explanations and budget validity remain independent, so qualifying taxi value may coexist with a final `taxi_budget_exceeded` hard issue. After attaching `evaluateTaxiValue()` explanations, construct the final `RouteCandidate` values, call `rankRoutes(finalCandidates)`, then call `extractRouteOptions()`. Explanations do not alter CE-14 ranking, so the final order remains identical. `consideredCandidateCount` counts only final candidates passed to final ranking; the preliminary ranking pass is not counted separately.
+- **Final ranking and option ownership:** The implemented final path is `rankRoutes(finalCandidates)` → `extractRouteOptions(rankedCandidates)`. CE-14 remains the sole ranking owner. CE-15 remains the sole owner of Recommended, Cheapest, Fastest, route-identity deduplication, and objective-label merging.
 - **Explanation aggregation:** Current CE-16 candidate explanations contain only explanations returned by `evaluateTaxiValue()`. CE-16 independently generates none of `fixed_appointment_anchor`, `appointment_gap_inserted`, `must_visit_preserved`, `lower_transit_risk`, `public_transit_default`, `lower_taxi_cost`, or `earlier_finish`; those codes remain available domain vocabulary without a new CE-16 generator.
 - **Considered-candidate count:** `consideredCandidateCount` is exactly the number of fully assembled `RouteCandidate` values passed to `rankRoutes()`. Count each property-order plus legal-mode candidate that reaches assembly once. Do not count raw orders, rejected or no-mode orders, taxi-value counterfactual simulations, duplicate option labels, or extracted `RouteOption` values.
 - **Candidate ID:** Use `JSON.stringify([propertyOrder, transportModes])` as the deterministic collision-safe Daily Route identity. Equivalent property order and transport modes therefore produce the same ID. The ID is not a ranking field, option-selection field, tie-break, or user-facing label and uses no randomness, current time, locale behavior, or object identity.
 - **No-legal-mode failure:** If valid normalized input yields zero `RouteCandidate` values because no order has a legal mode sequence, return `failure` with frozen empty options, `consideredCandidateCount = 0`, and exactly one engine-level `travel_data_unavailable` conflict with empty `propertyIds` and `{ reason: "no_legal_mode_sequence" }`. Do not fabricate travel values or reverse edges.
 - **Same-day-overflow failure:** A legal order/mode combination whose CE-07 simulation would cross minute 1439 produces no candidate and never wraps into another day. Continue if another candidate assembles. If none remain and at least one attempted simulation failed solely from same-day overflow, return `failure` with frozen empty options, `consideredCandidateCount = 0`, and one engine-level `end_time_exceeded` conflict with empty `propertyIds` and `{ reason: "same_day_overflow" }`. When zero candidates involve both causes, `same_day_overflow` takes precedence if at least one legal sequence existed and was attempted; otherwise use `no_legal_mode_sequence`.
-- **Contract-closure boundary:** These decisions close CE-16 Daily Route assembly and orchestration gaps only. They do not change CE-02 time/date behavior, CE-03 normalization, CE-04 validation, CE-07 simulation, CE-08 constraints, CE-09 search, CE-10 helper semantics, CE-11 risk, CE-12 mode legality/enumeration, CE-13 taxi budget/value, CE-14 ranking, or CE-15 extraction. They resolve no Decision Gate and do not implement CE-16 or begin CE-17.
-- **Deterministic tests:** End-to-end same input/matrix repeatability; relevant focused and acceptance suites.
+- **Implemented ownership preservation:** CE-16 changes none of CE-02 time/date behavior, CE-03 normalization, CE-04 validation, CE-07 simulation, CE-08 constraints, CE-09 search, CE-10 helper semantics, CE-11 risk, CE-12 mode legality/enumeration, CE-13 taxi budget/value, CE-14 ranking, or CE-15 extraction. It resolves no Decision Gate and does not begin CE-17 implementation.
+- **Integrated acceptance — Cases 01–04:** Case 01 covers fixed appointments and real required buffers; Case 02 covers start-window normalization flowing into simulation and feasibility; Case 03 covers `finish_before` latest-start derivation; Case 04 covers a feasible property placement between anchors through exhaustive CE-09 order search, complete mode enumeration, simulation, and constraint evaluation without requiring CE-10 production expansion.
+- **Integrated acceptance — Case 05:** The authoritative fixture compares a hard-feasible 28-minute transit route with 2 transfers, 900m walking, a real CE-07 five-minute fixed-appointment buffer, and CE-11 `riskPenalty = 5` against a hard-feasible 31-minute direct route with 100m walking, a real 15-minute buffer, and `riskPenalty = 0`. Must and total completion counts tie; the safer route is Recommended despite taking three more travel minutes, proving CE-14 risk precedence without injected risk or buffer evidence.
+- **Integrated acceptance — Cases 06–08:** Case 06 produces `avoid_late` when taxi restores feasibility. Case 07 compares 55-minute transit with 18-minute taxi, produces `transit_detour`, and preserves taxi-value evidence independently from `taxi_budget_exceeded`. Case 08 proves the distinct feasible shorter all-transit reference, feasible extra-property taxi candidate, and timing-infeasible same-order transit counterfactual required for `unlock_extra_viewing`; a feasible same-order counterfactual suppresses that reason.
+- **Integrated acceptance — Cases 09–11:** Case 09 covers zero-, both one-, and two-taxi legal combinations without a two-taxi cap. Case 10 proves joint property-order × transport-mode optimization. Case 11 preserves must property A while the must-containing routes exceed `latestEnd`, surfaces `end_time_exceeded`, selects a conflicted route containing both must A and optional B because the equal hard-violation tier favors greater completion, returns a partial top-level result, and adds no P1 opportunity-cost logic.
+- **Integrated acceptance — Cases 13, 16, and 17:** Case 13 verifies Recommended/Cheapest/Fastest deduplication into one route when applicable. Case 16 covers degraded usable travel, taxi-only strategy behavior, missing and reverse-only edges, and provider-failure data without fabrication. Case 17 verifies normal one-property Daily Route optimization.
+- **Additional deterministic coverage:** Ordered validation failures stop before optimization and map to frozen `invalid_input` conflicts; all-conflicted options produce a partial daily result; hard evidence preserves timeline → travel-data → taxi-budget order without semantic deduplication; same-day overflow is skipped when another candidate survives and produces explicit failure when all legal attempts overflow; exact `consideredCandidateCount`, immutable inputs/outputs, deterministic IDs, and repeated-input deep equality are verified. Cases 12, 14, and 15 remain deferred.
+- **Deterministic tests and validation:** 25 CE-16 focused tests pass, bringing the repository to 543 tests across 21 files. `npx vitest run test/route/optimizeDayRoute.test.ts`, `npm test`, `npm run lint`, `npx tsc --noEmit`, and `git diff --check` pass. Source audits find no forbidden provider dependency, UI/browser/network/storage access, nondeterminism, or weighted/composite score. `agentName` is copied only structurally during normalization and has no behavior.
 - **Mapped TEST_CASES:** Current Daily Route Cases 01–11, 13, 16, 17. Cases 12, 14, and 15 are not completion requirements.
 - **Decision Gates:** Gate C does not block V0.1A; unresolved multi-day gates do not alter this daily API.
-- **Definition of done:** All mapped current daily cases pass; route imports no provider; output is deterministic; lint/typecheck/diff checks pass; accepted in review.
-- **Non-goals:** Multi-day types, Day Assignment, UI, LocalStorage, providers/maps, dynamic rerouting, Plan B, Case 12.
+- **Definition of done:** All mapped current daily cases pass; the optimizer imports no provider, consumes only a precomputed matrix, returns deterministic immutable output, passes all recorded checks and audits, and has completed external implementation re-review.
+- **Non-goals:** Accepted type/config changes; provider calls or matrix construction inside the route optimizer; UI, network, or storage; weighted scoring; same-agent behavior; a CE-10 production expansion requirement; rerouting; Plan B; multi-day contracts; Day Assignment; whole-plan ranking/options; Decision Gate resolution; CE-17 implementation; and Cases 12, 14, and 15. None are implemented in CE-16.
 - **Future-scale notes:** Integration depends on search interfaces, not DFS-specific semantics.
 
 ### CE-17 — Multi-day input, eligible-day derivation, and validation
 
-- **Status:** PLANNED
+- **Status:** NEXT
 - **Prerequisites:** CE-16 and resolution of contract-blocking Gates B, D, E, and I as applicable.
 - **Goal:** Define multi-day source contracts and pure rules for available dates, eligibility, and validation.
 - **Scope:** Available-date collection, per-date availability, optional maximum-active-day/finish-by constraints, eligible-day derivation, fixed/limited/flexible rules, unavailable-fixed-date conflict, multi-day result foundations.
