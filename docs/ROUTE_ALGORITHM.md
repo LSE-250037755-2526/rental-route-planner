@@ -22,8 +22,11 @@ The current single-day settings and result contracts are `DayPlanSettings` and
 `DayRouteOptimizationResult`. CE-01.1 completed this name-only clarification
 without changing their fields or invariants.
 
-The integrated daily API `optimizeDayRoute()` is a CE-16 target, not a current
-implementation. Concrete multi-day TypeScript contracts and
+The integrated daily API `optimizeDayRoute()` is the accepted CE-16
+implementation. Its current source behavior is the origin-to-properties
+baseline and has no explicit end-policy or terminal-leg contract. CE-16.1 is a
+controlled extension of that accepted baseline; its source implementation has
+not started. Concrete multi-day TypeScript contracts and
 `optimizeMultiDayPlan()` do not exist yet and belong to CE-17 through CE-21.
 
 ## 2. Two separate optimization pipelines
@@ -71,6 +74,14 @@ may activate fewer dates than supplied and must never activate a date the user
 did not supply. Optional maximum-active-day and finish-by constraints further
 restrict candidate plans.
 
+Each available date owns its date, earliest start, latest end, origin location,
+and explicit Open or Fixed end policy. Transport strategy, fixed-appointment
+buffer, and route preferences are shared plan settings. Taxi budget is one
+shared whole-plan budget, not a full independent allowance repeated for every
+active date. One day's terminal choice does not determine the next day's
+origin, and the Core Engine does not model cross-day continuity or overnight
+movement.
+
 Fixed-date appointments require exactly their fixed date. That date becomes an
 eligible assignment only when it is also user-supplied and available; otherwise
 validation reports an explicit conflict instead of inventing or activating the
@@ -106,8 +117,37 @@ Examples:
 ```
 
 Adding 20 minutes to 23:50 must not silently become 00:10 in the same Daily
-Route. CE-02 will implement these primitives; current aliases do not yet enforce
-the formats or bounds.
+Route. Accepted CE-02 source provides these deterministic primitives, including
+strict format and bound validation and bounded same-day minute arithmetic.
+
+### Daily Route end policy and completion
+
+Every Daily Route has one explicit, finalized end policy:
+
+- **Open end** — the route is `origin → properties`. Route completion is the
+  final property's viewing end. There is no terminal leg, terminal mode,
+  terminal matrix requirement, terminal travel time or cost, terminal taxi
+  count, terminal risk, or terminal explanation. Open end is a complete route,
+  not missing input or a provisional result.
+- **Fixed end** — the route is `origin → properties → fixed destination`. Route
+  completion is arrival at that destination. When the last property and fixed
+  destination have different location identities, the terminal leg is an
+  ordinary directed travel leg and participates in matrix requirements, mode
+  legality and enumeration, timeline simulation, hard constraints, risk, taxi
+  value, metrics, ranking, explanations, and candidate identity.
+
+“Return to start” is represented only as a Fixed end whose destination location
+equals the origin location. It must never be inferred from Open end.
+
+When the final property's location identity equals the Fixed destination's
+location identity, the route uses exactly one canonical no-travel terminal
+state. That state requires no provider or matrix self-edge and no mode choice;
+it contributes zero minutes, zero cost, zero taxi legs, and zero risk. It must
+not be duplicated as transit and taxi variants.
+
+`latestEnd` is the route-completion deadline. Equality is feasible. Completion
+after the boundary produces `end_time_exceeded`. For Open end this compares the
+last viewing end; for Fixed end it compares destination arrival.
 
 ## 4. Core daily-route objective
 
@@ -160,8 +200,8 @@ Current route-domain concepts include:
 
 The current `Property` uses a structured `viewingTime` union rather than raw
 flattened earliest/latest fields. CE-01 also defines normalized-output type
-vocabulary, but CE-03 will implement the day-scoped transformation to normalized
-start bounds.
+vocabulary, and accepted CE-03 source in `src/lib/route/normalizeWindows.ts`
+implements the day-scoped transformation to normalized start bounds.
 
 ### Single-day settings
 
@@ -173,6 +213,12 @@ preferences.
 
 CE-01.1 changed this daily contract's name only; its fields and invariants
 remained unchanged.
+
+The current CE-16 source contract still lacks an explicit end-policy field and
+resolved terminal output. CE-16.1 will extend the daily contract with the
+Open/Fixed semantics above. Any concrete type or field names proposed in the
+implementation ledger are engineering recommendations, not current source
+contracts.
 
 ### Daily route outputs
 
@@ -224,6 +270,9 @@ Hard constraints take priority over efficiency and cost:
 - fixed times and narrow windows form time anchors;
 - missing travel data is not fabricated;
 - the applicable taxi budget is not exceeded.
+
+For a Fixed end, the ordinary terminal leg and destination arrival participate
+in these checks. For an Open end, there is no terminal travel constraint.
 
 Must-visit properties must never be silently deleted. A fixed appointment whose
 date is absent from the user's available dates produces an actionable
@@ -282,11 +331,16 @@ between which anchors. Search may prefer exploring insertions that could
 increase completion, but final completion and risk value are determined by
 simulation and ranking rules outside the traversal.
 
+At the day-end boundary, `travelToNextAnchor` is absent for Open end, is the
+directed last-property-to-destination travel time for an ordinary Fixed end,
+and is zero for the canonical same-location Fixed terminal. Gap evaluation is
+pure and consumes precomputed data; it never calls a provider.
+
 ## 11. Travel architecture and precomputed matrix
 
 Travel acquisition is outside the route engine.
 
-Future intended ownership is `src/lib/travel/` for:
+Current ownership is `src/lib/travel/` for:
 
 - `TravelTimeProvider` and provider implementations;
 - travel edges and matrix construction;
@@ -301,6 +355,12 @@ providers inside assignment search, route search, simulation, or ranking.
 V0.1A uses deterministic mock travel data. A later real provider may replace the
 mock acquisition layer without changing optimizer rules.
 
+Open end requests no terminal edges. Fixed end requires directed edges from
+each property that may be last to the fixed destination when their location
+identities differ. Matrix construction must skip same-location self-pairs,
+deduplicate deterministically, preserve direction, and never infer a reverse
+edge or fabricate a missing value.
+
 ## 12. Public-transit executability risk
 
 Transit is evaluated by more than nominal duration. Current configurable V0.1A
@@ -311,8 +371,10 @@ riskScore =
   (transferCount >= 2 ? 2 : 0)
 + (walkMeters >= 800 ? 1 : 0)
 + (buffer < 10 ? 2 : buffer < 15 ? 1 : 0)
-+ optional complex-transfer adjustment
 ```
+
+The accepted CE-11 contract has no configured complex-transfer adjustment and
+does not emit a `complex_transfer` risk code.
 
 - 0–1 → Low
 - 2 → Medium
@@ -322,6 +384,12 @@ When daily candidates have similar travel time, prefer the lower-risk option
 with more buffer according to the daily hierarchy. Risk thresholds stay in
 centralized configuration. Whole-plan risk aggregation is unresolved and is not
 defined by summing these scores here.
+
+An ordinary Fixed terminal transit leg reuses this exact accepted CE-11 risk
+model. Its signed slack is `latestEnd - destinationArrival`; risk buffer input
+is `max(0, signedSlack)`, while lateness is recorded separately as
+`exceededByMinutes`. Open end and same-location Fixed terminals add no terminal
+risk.
 
 ## 13. Route order and transport mode are jointly optimized
 
@@ -363,6 +431,11 @@ permanent universal maximum.
 V0.1A validates local enumeration for 4–8 properties. This is performance
 coverage, not a supported-input maximum.
 
+Open end and same-location Fixed end add no terminal mode choice. An ordinary
+Fixed terminal participates in mode legality and combination search like any
+other travel leg. Candidate generation must not duplicate a same-location
+terminal into transit/taxi variants.
+
 ## 14. When taxi is valuable
 
 Taxi is not recommended merely because it is faster. V0.1A prioritizes:
@@ -389,8 +462,16 @@ Changing a key leg to taxi allows another property to be completed before the
 daily latest end or restores daily must-visit feasibility.
 
 Overall schedule value takes priority over pure minutes saved per currency unit.
-Whether a taxi budget is shared across the whole Viewing Plan or assigned per
-day remains an unresolved Decision Gate.
+For an ordinary Fixed terminal, existing `avoid_late`, `transit_detour`, and
+`unlock_extra_viewing` reasons may justify taxi under the same configured rules.
+When terminal taxi avoids an `end_time_exceeded` conflict,
+`lateIssuesAvoided = 1` and the avoided lateness magnitude equals that
+conflict's `exceededByMinutes`. No new terminal-only reason code or threshold is
+introduced.
+
+The multi-day taxi budget is one shared whole-plan budget. It is not reset to
+the full cap on each active day. Current daily budget behavior remains the
+accepted CE-16 baseline until the multi-day layer implements shared aggregation.
 
 ## 15. Full same-day timeline simulation
 
@@ -401,10 +482,14 @@ daily start. Recalculate:
 - waiting;
 - viewing start and end;
 - buffer;
-- estimated daily end;
+- route completion (final viewing end for Open, destination arrival for Fixed);
 - taxi cost;
 - completion count;
 - risk.
+
+An ordinary Fixed terminal is simulated after the final viewing and contributes
+to all applicable totals. A same-location Fixed terminal contributes a single
+zero-travel completion state. Open end contributes no terminal state or totals.
 
 Do not replace one segment duration without recalculating downstream times. Each
 active date is simulated independently and must have a monotonic 0–1439
@@ -438,8 +523,12 @@ From daily candidates, extract and deduplicate:
 - **Recommended** — Daily Route selected by the hierarchy above.
 - **Fastest** — feasible Daily Route finishing earliest or minimizing travel within strategy and budget.
 
-Deduplicate by property order plus transport-mode sequence. If all labels resolve
-to one Daily Route, expose one option with the applicable labels.
+Candidate and option identity must include property order, property-leg modes,
+end-policy kind, Fixed destination identity where applicable, and ordinary
+terminal mode where applicable. It must distinguish Open from Fixed, different
+Fixed destinations, and Fixed no-travel from Open. If all labels resolve to one
+identical Daily Route under this identity, expose one option with the applicable
+labels.
 
 This section does not decide whether the final multi-day result exposes one
 whole plan, three whole-plan options, or daily alternatives. That topology is an

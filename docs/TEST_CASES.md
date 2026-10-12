@@ -11,6 +11,11 @@ Current V0.1A Daily Route Core Engine specifications:
 - Cases 01–11
 - Case 13
 - Cases 16–17
+- CE-16.1 Open/Fixed End acceptance groups 01–28
+
+The CE-16.1 groups below are the locked acceptance contract for the next
+milestone. CE-16.1 source and automated-test implementation have not started;
+the accepted current source remains the CE-16 origin-to-properties baseline.
 
 Current V0.1A multi-day specifications, introduced with the multi-day layer:
 
@@ -211,6 +216,101 @@ Mode legality and budget validity are domain rules; enumeration is search.
 - Product UX may suggest adding another property to create a multi-property route
 - The multi-property threshold must not make one-property optimizer input invalid
 
+## CE-16.1 Open/Fixed End acceptance groups
+
+These groups extend, rather than invalidate, the accepted CE-16 daily optimizer.
+Existing scenarios migrate to explicit Open End unless a scenario specifically
+tests Fixed End. Concrete TypeScript type names remain implementation
+recommendations until CE-16.1 source work is accepted.
+
+### Open End
+
+1. **Valid finalized route** — An explicit Open End produces a complete,
+   finalized Daily Route; it is not treated as missing input, provisional, or
+   incomplete.
+2. **Completion is final viewing end** — `routeCompletionAt` equals the final
+   property's `viewingEndAt`.
+3. **No terminal matrix requirement** — Matrix preparation requests no
+   property-to-end pair for Open End.
+4. **No terminal evidence** — Open End has no terminal leg or mode and adds no
+   terminal travel time, taxi cost/count, risk, or taxi explanation.
+5. **`latestEnd` boundary** — Final viewing end before or exactly equal to
+   `latestEnd` is feasible; a later completion produces
+   `end_time_exceeded` with the deterministic exceeded amount.
+6. **Distinct from return to origin** — Open End remains different from Fixed
+   End at `originLocationId`; the optimizer never silently turns Open into a
+   return trip.
+
+### Fixed End
+
+7. **Explicit different destination** — Fixed End with a destination different
+   from the final property produces `origin → properties → destination` and an
+   ordinary directed terminal leg.
+8. **Return to origin** — Return to start is represented as Fixed End whose
+   destination identity equals `originLocationId`, not as a special mode or an
+   Open default.
+9. **Terminal transit within deadline** — Available terminal transit arriving
+   before or exactly at `latestEnd` is included and remains deadline-feasible.
+10. **Terminal transit after deadline** — Terminal transit arriving after
+    `latestEnd` produces `end_time_exceeded`; lateness is represented by
+    `exceededByMinutes`.
+11. **Terminal taxi restores feasibility** — When legal, available, valuable,
+    and within budget, terminal taxi may replace late terminal transit and
+    restore deadline feasibility.
+12. **Terminal time in totals and completion** — Ordinary terminal travel is
+    included in total travel time and route completion is destination arrival,
+    not final viewing end.
+13. **Terminal taxi in cost, count, and budget** — Ordinary terminal taxi cost
+    and leg count are included exactly once and participate in applicable
+    budget validity.
+14. **Deadline-slack terminal risk** — Signed slack is
+    `latestEnd - arrivalAtEndLocation`; CE-11 risk receives
+    `max(0, signedSlack)`, while late arrival retains zero risk-buffer input and
+    a separate exceeded amount. Existing thresholds and weights are unchanged.
+15. **Terminal `avoid_late`** — Terminal taxi that avoids
+    `end_time_exceeded` may use `avoid_late`, with `lateIssuesAvoided = 1` and
+    `maximumLateByMinutesAvoided` equal to the avoided
+    `exceededByMinutes`.
+16. **Terminal `transit_detour`** — An ordinary terminal taxi may use the
+    existing `transit_detour` reason only when the existing configured rule is
+    satisfied.
+17. **Terminal `unlock_extra_viewing`** — An ordinary terminal taxi may use the
+    existing `unlock_extra_viewing` reason when the existing schedule-value
+    rule is satisfied; no terminal-only reason code is introduced.
+
+### Same-location Fixed End
+
+18. **Final property equals destination** — Equal final-property and Fixed-end
+    location identities select the same-location terminal path.
+19. **Canonical no-travel completion** — Exactly one canonical no-travel
+    terminal state completes the route at final viewing end.
+20. **No provider or self-edge** — The canonical state requires no provider
+    call, no TravelMatrix self-edge, and no reverse-edge inference.
+21. **No duplicate terminal candidates** — Search does not generate transit
+    and taxi variants for the same-location terminal.
+22. **Zero terminal contribution** — The terminal contributes zero travel
+    time, cost, taxi count, and risk and requires no terminal mode.
+
+### General end-contract coverage
+
+23. **Terminal travel-data states** — Ordinary Fixed terminal handling
+    preserves missing-entry, unavailable, degraded, and provider-failure
+    distinctions; it does not infer reverse data or fabricate zero-duration
+    travel.
+24. **Same-day overflow** — Terminal travel that exceeds minute 1439 or crosses
+    the day boundary is not wrapped into the next day and produces the
+    applicable deterministic conflict.
+25. **Open/Fixed identity** — Candidate and option identity never deduplicates
+    Open End with Fixed End, including Fixed no-travel.
+26. **Destination/mode identity** — Identity distinguishes different Fixed
+    destinations and ordinary terminal transit from ordinary terminal taxi.
+27. **Determinism and immutability** — Repeated evaluation yields equivalent
+    ordered results without mutating settings, properties, travel data, or
+    prior results.
+28. **CE-16 regression coverage** — Existing CE-16 acceptance scenarios retain
+    their accepted behavior after being migrated to explicit Open End, except
+    where a scenario is intentionally converted to test Fixed End.
+
 ## Deferred/P1 Daily Route cases
 
 ### Case 12 — Same agent is only a soft constraint
@@ -386,15 +486,20 @@ Mode legality and budget validity are domain rules; enumeration is search.
 - Provide an actionable path to add another available date or modify an appointment
 - Exact multi-day success/partial/failure status remains governed by Decision Gate I
 
-## Deferred Decision-Gate acceptance placeholders
+## Decision-Gate acceptance placeholders
 
-These scenarios stay documented but do not enter current passing criteria until
-their gates close:
+The following scenario stays documented but does not enter current passing
+criteria until its gate closes:
 
 1. A feasible one-day plan with tighter buffers, higher risk, or more taxi use versus a feasible lower-risk two-day plan. Gate A decides the recommendation hierarchy.
-2. A multi-day plan whose taxi spend fits a whole-plan budget but not hypothetical per-day budgets, or vice versa. Gate B decides budget scope.
 
-Do not encode expected winners for either scenario yet.
+Do not encode an expected winner for that scenario yet.
+
+Gate B is user-resolved. Future CE-17 through CE-20 multi-day acceptance must
+include a plan whose aggregate taxi spend is tested against one shared
+whole-plan budget. The full cap must not be independently reusable on every
+active day. This is not current source behavior until the multi-day layer is
+implemented.
 
 ## Cross-cutting automated-test expectations
 
@@ -404,7 +509,9 @@ For each applicable Core Engine test:
 - assert exact or bounded ordering only where the product rule requires it;
 - assert transport mode where relevant;
 - assert feasibility and conflict codes;
-- assert the applicable taxi budget is never exceeded without resolving Gate B;
+- assert each Daily Route respects its current applicable budget contract and,
+  once multi-day budget aggregation is implemented, assert total plan taxi
+  spend does not exceed the one shared whole-plan budget;
 - assert must-visit properties are never silently removed;
 - assert active dates are a subset of user-supplied dates;
 - assert fixed appointments never change dates;

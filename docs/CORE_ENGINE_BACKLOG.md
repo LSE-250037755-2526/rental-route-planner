@@ -39,9 +39,12 @@ Status reflects repository implementation, not documentation of future intent.
 - **D5:** CE-01.1 makes only the minimal daily-contract renames; multi-day source contracts wait until CE-17.
 - **D6:** Business/domain rules are separate from replaceable search strategies.
 - **D7:** 4–8 properties and up to three V0.1 UI dates are targets/boundaries, not permanent domain limits.
-- **D8:** Current acceptance comprises daily Cases 1–11, 13, 16, 17 and multi-day Cases 18–25 as their milestones arrive. Cases 12, 14, and 15 are deferred.
+- **D8:** Current acceptance comprises daily Cases 1–11, 13, 16, 17; the 28 CE-16.1 Open/Fixed End intent groups; and multi-day Cases 18–25 as their milestones arrive. Cases 12, 14, and 15 are deferred.
 - **D9:** Core Engine work proceeds through integrated daily optimization and then the complete multi-day planner before substantial UI may be considered.
 - **D10:** This file is the persistent and sole detailed CE ledger.
+- **D11:** Every Daily Route has an explicit end policy: Open End or Fixed End. Open End is finalized and completes at the final viewing end; Fixed End completes on arrival at its destination. Return to Start is Fixed End whose location equals the origin, never an implicit Open End default.
+- **D12:** An ordinary Fixed End terminal leg participates in mode search, simulation, constraints, totals, budget, risk, explanations, and identity. When the final property is already at the fixed destination, one canonical no-travel terminal state applies with zero time, cost, taxi count, and risk and no mode, provider call, matrix self-edge, or reverse inference.
+- **D13:** Gate B is user-resolved to one shared whole-plan taxi budget. Gate D is user-resolved so date, earliest/latest daily bounds, origin, and end policy are per-date, while transport strategy, fixed-appointment buffer, and route preferences are plan-level shared. No cross-day end-to-origin continuity or overnight movement is required.
 - **S1:** Travel acquisition, providers, and matrix construction are outside the route engine. Optimizers consume precomputed `TravelMatrix` data only.
 
 ## 4. Current implementation snapshot
@@ -64,7 +67,8 @@ Status reflects repository implementation, not documentation of future intent.
 - CE-14 — **COMPLETE**
 - CE-15 — **COMPLETE**
 - CE-16 — **COMPLETE**
-- CE-17 — **NEXT**
+- CE-16.1 — **NEXT**
+- CE-17 — **BLOCKED**
 - CE-18 through CE-21 — **PLANNED**
 
 Current source includes the Vitest foundation, route-domain models, centralized
@@ -143,7 +147,9 @@ pair was not requested, while a requested unavailable pair remains an explicit
 edge. Transit and taxi availability are independent, and taxi-only usable data
 is degraded rather than complete. `src/lib/route/` does not depend on
 `TravelTimeProvider`; route optimization consumes a precomputed `TravelMatrix`.
-Gate D remains unresolved.
+Gate D is now user-resolved for future multi-day contracts, but current CE-05
+source still has no Open/Fixed End matrix-request contract; that extension is
+CE-16.1 work.
 
 `src/lib/travel/MockTravelTimeProvider.ts`,
 `test/fixtures/travel/results.ts`, and
@@ -168,8 +174,9 @@ not call `buildTravelMatrix()`. `buildFixtureTravelMatrix()` delegates matrix
 construction to CE-05. A missing fixture is never replaced with default travel
 data; ordinary unavailable data remains distinct from provider failure, and
 taxi-only data remains distinct from both-unavailable data. CE-06 fixtures
-encode travel data, not route decisions. Gate D remains unresolved, and no
-property-count hard cap exists.
+encode travel data, not route decisions. Gate D is user-resolved, but CE-06
+fixtures have not yet been migrated to explicit Open/Fixed End scenarios; that
+migration belongs to CE-16.1. No property-count hard cap exists.
 
 `src/lib/route/simulateTimeline.ts` and
 `test/route/simulateTimeline.test.ts` provide the authoritative pure daily
@@ -344,8 +351,9 @@ main `transit_only` Daily Route enumeration and legal for `transit_first` and
 
 CE-12 does not inspect `TaxiBudget`, taxi cost, budget amount, or
 unset/unlimited/capped policy. CE-13 owns applicable Daily Route taxi-budget
-enforcement and taxi value; Gate B remains unresolved only for future
-multi-day budget scope.
+enforcement and taxi value. Gate B was unresolved when CE-12 was accepted and
+is now USER-RESOLVED to one shared whole-plan budget; this does not retroactively
+add multi-day behavior to CE-12.
 
 `TransportModeSequence` is `readonly TransportMode[]`.
 `EnumerateModeSequencesInput` supplies a strategy, origin, ordered normalized
@@ -397,8 +405,8 @@ does not prune legal choices using duration, transfer count, walking distance,
 risk, taxi value, or budget. Inputs are not mutated, each emitted sequence and
 the outer result are frozen, repeated inputs produce deeply equal results in
 stable order, and exhaustive results contain no duplicates. No property-count
-hard cap or two-taxi cap exists. More than eight legs remain valid; Gate C and
-Gate B remain unresolved.
+hard cap or two-taxi cap exists. More than eight legs remain valid; Gate C
+remains unresolved, while Gate B is now USER-RESOLVED without changing CE-12.
 
 `src/lib/route/evaluateTaxiValue.ts`,
 `src/lib/route/evaluateTaxiBudget.ts`,
@@ -416,7 +424,8 @@ cap without rewriting it to `unlimited`; `unlimited` explicitly accepts no
 daily hard cap; and `capped` accepts authoritative
 `simulation.totals.taxiCost` exactly when it is less than or equal to the cap.
 Aggregate daily taxi cost, not per-leg checks, controls validity. This rule is
-Daily Route-only and does not resolve Gate B's future multi-day budget scope.
+Daily Route-only. Gate B's later USER-RESOLVED whole-plan shared-budget policy
+does not turn this accepted evaluator into multi-day aggregation.
 
 Taxi-value evaluation consumes aligned caller-supplied `SimulationResult` and
 `ConstraintEvaluation` evidence plus a precomputed directed `TravelMatrix`.
@@ -539,6 +548,13 @@ Current source uses the clarified daily-route contract names:
 
 No concrete multi-day source contract or multi-day optimizer exists yet. The
 integrated daily optimizer now exists through accepted CE-16.
+
+CE-16 remains accepted and complete. CE-16.1 source implementation is **NOT
+STARTED**. Current accepted source remains the CE-16 baseline `origin →
+properties`, with route completion at the final viewing end and no explicit end
+policy or terminal contract. CE-16.1 is a controlled extension that introduces
+the newly explicit Daily Route end-policy domain concept; it is not a correction
+of a failed CE-16 implementation.
 
 ## 5. Module ownership and dependency boundaries
 
@@ -668,7 +684,7 @@ Assignment, route search, simulation, or ranking.
 - **Likely ownership:** `src/lib/travel/types.ts`, `src/lib/travel/TravelTimeProvider.ts`, `src/lib/travel/buildTravelMatrix.ts`, `test/travel/*`.
 - **Deterministic tests:** Provider calls occur only while building; each required pair is represented or explicitly unavailable; failure/degraded states are not fabricated.
 - **Mapped TEST_CASES:** Case 16 foundations.
-- **Decision Gates:** Gate D may affect which daily origins a future multi-day acquisition request needs; do not settle it here.
+- **Decision Gates:** Gate D was unresolved when CE-05 was accepted and is now USER-RESOLVED. CE-05 remains unchanged; CE-16.1 adds end-policy-aware requested-pair coverage, and CE-17 later owns per-date settings.
 - **Definition of done:** `src/lib/route/` has no provider dependency; matrix is precomputed and immutable/read-only to optimizers; all checks pass.
 - **Non-goals:** Mock fixture data, route search, map APIs, real geocoding.
 - **Future-scale notes:** Builder may later batch/cache without changing matrix consumer contracts.
@@ -781,7 +797,7 @@ Assignment, route search, simulation, or ranking.
 - **Implemented ownership:** `src/lib/route/isModeAllowed.ts`; `src/lib/route/search/enumerateModes.ts`; `test/route/isModeAllowed.test.ts`; `test/route/search/enumerateModes.test.ts`.
 - **Rule/search separation:** Rules define truth and search decides what to explore. Pure `isModeAllowed()` owns mode-specific availability and strategy legality. `enumerateModeSequences()` owns exact directed-edge lookup, deterministic traversal, and combination enumeration; it calls the rule and does not redefine legality.
 - **Legality input and availability:** `isModeAllowed()` consumes only `TransportStrategy`, `TransportMode`, and `TravelModeDataStatus`, with no matrix, property-order, timeline, taxi-budget, taxi-cost, duration, risk, or ranking input. Available and degraded alternatives are usable subject to strategy; unavailable is illegal. Transit and taxi status are evaluated independently rather than through aggregate edge status, with no degraded surcharge or fallback.
-- **Strategy semantics:** Usable transit is legal under `transit_only`, `transit_first`, and `efficiency_first`. Usable taxi is illegal for the main `transit_only` Daily Route and legal under `transit_first` and `efficiency_first`. Transit-only taxi backup and Plan B are deferred. CE-12 does not inspect or enforce `TaxiBudget`, taxi cost, budget amounts, or unset/unlimited/capped policy; CE-13 owns Daily Route taxi budget and value, while Gate B remains unresolved for future multi-day scope.
+- **Strategy semantics:** Usable transit is legal under `transit_only`, `transit_first`, and `efficiency_first`. Usable taxi is illegal for the main `transit_only` Daily Route and legal under `transit_first` and `efficiency_first`. Transit-only taxi backup and Plan B are deferred. CE-12 does not inspect or enforce `TaxiBudget`, taxi cost, budget amounts, or unset/unlimited/capped policy; CE-13 owns Daily Route taxi budget and value. Gate B is now USER-RESOLVED for future shared whole-plan enforcement without changing CE-12 legality.
 - **Enumeration contracts:** `TransportModeSequence` is `readonly TransportMode[]`. `EnumerateModeSequencesInput` contains strategy, origin, ordered normalized properties, and precomputed `TravelMatrix`. `TransportModeCombinationSearchStrategy` is the replaceable boundary and `exhaustiveModeCombinationSearchStrategy` is the current deterministic implementation.
 - **Leg and direction invariants:** Every complete sequence has one mode per ordered property. Index zero represents origin to the first property; later indices represent the preceding ordered property to the current property; no return leg is added. Search uses the exact directed edge with no reverse fallback. A missing edge or leg with no legal mode yields no complete sequence for that order, without fabrication or conflict generation.
 - **Mode-specific combinations:** Transit-only usable data yields transit under every strategy. Taxi-only usable data yields no mode under `transit_only` and taxi under the two taxi-permitting strategies. Both usable modes yield transit under `transit_only` and transit then taxi under `transit_first` and `efficiency_first`; available and degraded statuses behave identically.
@@ -791,7 +807,7 @@ Assignment, route search, simulation, or ranking.
 - **Immutability and scale:** Inputs are unchanged, every emitted sequence and the outer array are frozen, repeated inputs are deeply equal in identical order, and exhaustive output has no duplicates. No property-count cap exists; the reviewed more-than-eight test uses one legal mode per leg to avoid unnecessary exponential test size. Gate C remains unresolved.
 - **Deterministic tests:** 18 legality tests and 26 enumeration tests, 44 CE-12 tests total. Coverage includes the complete strategy/mode/status matrix; available, degraded, and unavailable data; transit-only, taxi-only, taxi-only degraded, both-unavailable, and provider-failure edges; missing directed edges and no reverse fallback; origin-first, previous-property-later, and no-return semantics; empty and one-property orders; exact two-leg DFS order; eight three-leg combinations and the all-taxi sequence; exhaustive `efficiency_first`; Cases 06–10 foundations; no duration, transfer, walking, risk, or value pruning; more-than-eight no-hard-cap behavior; input immutability; output freezing; repeatability; uniqueness; and the replaceable strategy interface. All 349 repository tests across 16 files pass.
 - **Mapped TEST_CASES:** Cases 06–10.
-- **Decision Gates:** Gate B remains unresolved for future multi-day taxi-budget scope, and Gate C remains unresolved for future search crossover. CE-12 introduces no new gate and interprets no budget policy.
+- **Decision Gates:** Gate B is USER-RESOLVED for future multi-day work, and Gate C remains unresolved for future search crossover. CE-12 introduces no new gate and interprets no budget policy.
 - **Definition of done:** Legality tests pass independently; exhaustive search invokes legality, emits no illegal modes, and treats zero/one/two taxi legs as baseline rather than a cap. Focused CE-12 Vitest, `npm test`, `npm run lint`, `npx tsc --noEmit`, and `git diff --check` pass.
 - **Non-goals:** Type/config changes; property-order generation; timeline simulation; feasibility pruning; `Violation` or `Conflict` generation; risk calculation; taxi value; taxi-budget enforcement; candidate ranking; cheapest/recommended/fastest selection; `RouteCandidate` assembly; option extraction; provider calls; network; UI; storage; multi-day logic; hard property caps; and a universal two-taxi cap. None are implemented in CE-12.
 - **Future-scale notes:** Large combination spaces may use stronger search without changing legality.
@@ -806,7 +822,7 @@ Assignment, route search, simulation, or ranking.
 - **Approved daily budget policy:** `TaxiBudget { type: "unset" }` means no explicit Daily Route hard cap, so positive taxi spend is not blocked solely because no budget was entered. `TaxiBudget { type: "unlimited" }` explicitly accepts no Daily Route hard cap. `TaxiBudget { type: "capped", amount }` accepts Daily Route taxi spend iff `taxiCost <= amount`, including exact equality. `unset` and `unlimited` remain semantically distinct and are never normalized into each other.
 - **Budget source and result:** `evaluateTaxiBudget()` reads only `simulation.totals.taxiCost` as authoritative Daily Route spend; it does not recalculate cost from the `TravelMatrix`, stops, taxi-leg count, or estimated fares. The aggregate daily total, rather than independent per-leg comparisons against the full cap, controls validity. Passing returns frozen `hardViolationCount = 0`, `violations = []`, and `conflicts = []`. Capped exceedance returns exactly one error-severity `Violation` and one `Conflict`, both coded `taxi_budget_exceeded`, with route-level `propertyIds = []` and structured `budgetAmount`, `taxiCost`, `exceededBy`, and `budgetType = "capped"` parameters.
 - **Budget internal validation:** `simulation.totals.taxiCost` and a capped amount must be finite and non-negative. Malformed internal calculator evidence throws `RangeError`; CE-13 does not translate it to `invalid_input`, because CE-04 owns source-input validation.
-- **Daily versus multi-day budget boundary:** The approved `unset` behavior applies only to one Daily Route. It does not resolve Gate B, which remains open for whether future multi-day budget is shared across dates, separately capped per day, dynamically allocated, or aggregated another way.
+- **Daily versus multi-day budget boundary:** The approved `unset` behavior applies only to one Daily Route. Gate B is now USER-RESOLVED to one shared whole-plan budget, but CE-13 still performs only its accepted Daily Route evaluation; shared aggregation and enforcement belong to future plan-layer work.
 - **Taxi-value evidence contract:** `TaxiValueRouteEvidence` contains ordered normalized properties, an authoritative CE-07 `SimulationResult`, and a CE-08 `ConstraintEvaluation`. `EvaluateTaxiValueInput` contains reference evidence, candidate evidence, an optional `candidateTransitCounterfactual`, and a precomputed `TravelMatrix`; budget is not an input. `evaluateTaxiValue()` calls neither `simulateTimeline()` nor `evaluateTimelineConstraints()` and instead consumes caller-supplied evidence that CE-16 will later construct and orchestrate.
 - **Evidence alignment:** Every evidence object requires simulation stop count equal to ordered-property count and `simulation.stops[index].propertyId` equal to `orderedProperties[index].id`. Misalignment throws `RangeError`; no ID-based realignment occurs.
 - **Directed matrix and transit availability:** Each selected candidate taxi leg uses only the exact `travelFromLocationId -> candidate property locationId` edge. Missing exact edges and unavailable selected taxi alternatives contradict the already-simulated candidate and throw `RangeError`; no reverse fallback or provider call occurs. If that exact edge's transit alternative is unavailable, CE-13 skips the leg's transit comparison and fabricates no transit duration, minutes saved, `avoid_late`, or `transit_detour` evidence.
@@ -821,7 +837,7 @@ Assignment, route search, simulation, or ranking.
 - **Immutability and repeatability:** Inputs are not mutated. Taxi-value output freezes the outer explanation array, every explanation, and every parameter object. Taxi-budget output freezes the result, issue arrays, each issue, property-ID arrays, and parameters. Repeated identical inputs produce deeply equal deterministic output and stable explanation order.
 - **Deterministic tests:** 38 taxi-value tests and 16 taxi-budget tests, 54 CE-13 tests total. Coverage includes unset/unlimited; capped zero and below/exact/above cap; aggregate multi-taxi spend; malformed taxi cost and cap; positive/negative and downstream `avoid_late`; buffer-only non-lateness; same-position and candidate-feasibility requirements; config-derived detour minutes/ratio/transfer boundaries; available/degraded and unavailable transit; corrected Case 08 causality and feasible-transit false-positive regression; unrelated-conflict rejection; must-restoration positive/negative cases; counterfactual alignment, exact identity order, directed origins, taxi-to-transit substitution, and non-taxi mode preservation; explanation order; immutability; freezing; and repeatability. All 403 repository tests across 18 files pass; focused CE-13 Vitest, `npm test`, `npm run lint`, `npx tsc --noEmit`, and `git diff --check` pass.
 - **Mapped TEST_CASES:** Cases 06–09.
-- **Decision Gates:** Gate B remains unresolved for future multi-day taxi-budget semantics. The approved daily `unset` behavior does not choose whole-plan versus per-day budget scope. Gate C and every other Decision Gate remain unchanged.
+- **Decision Gates:** Gate B is now USER-RESOLVED to one shared whole-plan taxi budget. The accepted daily `unset` behavior remains unchanged and does not itself implement that plan-layer policy. Gate C and every other Decision Gate remain unchanged.
 - **Definition of done:** Daily budget semantics are explicit; value and validity are independent; taxi is not recommended merely for speed; completion/must unlocks require causal same-route counterfactual timing evidence; outputs are deterministic and immutable; all recorded checks pass.
 - **Non-goals:** Source type or configuration changes; mode enumeration; order or gap search; production timeline simulation or constraint reevaluation; risk or candidate ranking; cheapest/recommended/fastest selection; option extraction; `RouteCandidate` assembly; provider calls; minutes-per-money scoring; Plan B; UI; storage; network; multi-day budget aggregation; whole-plan taxi budget; and CE-14 implementation. None are implemented in CE-13.
 - **Future-scale notes:** Taxi combination strategy remains replaceable.
@@ -931,17 +947,39 @@ Assignment, route search, simulation, or ranking.
 - **Non-goals:** Accepted type/config changes; provider calls or matrix construction inside the route optimizer; UI, network, or storage; weighted scoring; same-agent behavior; a CE-10 production expansion requirement; rerouting; Plan B; multi-day contracts; Day Assignment; whole-plan ranking/options; Decision Gate resolution; CE-17 implementation; and Cases 12, 14, and 15. None are implemented in CE-16.
 - **Future-scale notes:** Integration depends on search interfaces, not DFS-specific semantics.
 
+### CE-16.1 — Daily Open/Fixed End contract extension
+
+- **Status:** NEXT. Contract closure is documented; source implementation is **NOT STARTED**.
+- **Prerequisites:** Accepted CE-16 and committed CE-16.1 contract closure.
+- **Goal:** Extend the accepted Daily Route engine with an explicit finalized Open End or Fixed End policy while preserving CE-16 behavior for explicitly migrated Open End scenarios.
+- **Controlled-extension boundary:** CE-16 remains accepted and COMPLETE. CE-16.1 responds to a newly explicit end-policy domain concept and is not a correction of failed CE-16 behavior.
+- **Locked end policy:** Every Daily Route supplies an explicit end policy. Open End is a finalized route, not missing input or a provisional plan. It contains no terminal leg or terminal mode and completes at the final property's `viewingEndAt`. Fixed End supplies a destination, includes ordinary terminal travel when required, and completes on arrival at that destination. Return to Start is Fixed End whose destination equals `originLocationId`; Open End must never default to it.
+- **Canonical same-location Fixed End:** When the final property location equals the Fixed End destination, use exactly one canonical no-travel terminal state: zero travel time, cost, taxi count, and risk; no terminal transport mode; no provider call; no `TravelMatrix` self-edge; no reverse inference; and no transit/taxi duplicate variants.
+- **Completion and latest-end semantics:** `latestEnd` is the Daily Route completion deadline. Open End completion is final viewing end; Fixed End completion is arrival at the fixed destination. Exact equality is feasible. Later completion emits `end_time_exceeded` with authoritative `exceededByMinutes`.
+- **Ordinary Fixed terminal participation:** Terminal travel participates in legal mode selection, full simulation, directed travel-data validity, hard feasibility, travel totals, taxi cost/count, Daily Route taxi-budget evaluation, route risk, ranking evidence, taxi-value explanations, and candidate/option identity.
+- **Fixed-terminal risk:** `deadlineSlackMinutes = latestEnd - arrivalAtEndLocation` is signed. CE-11 risk consumes `terminalRiskBufferMinutes = max(0, deadlineSlackMinutes)` and reuses existing transfer, walking, buffer, threshold, weight, level, and risk-code rules. A late route retains `end_time_exceeded`; clamping applies only to risk input.
+- **Terminal taxi explanations:** Ordinary Fixed terminal taxi may produce existing `avoid_late`, `transit_detour`, and `unlock_extra_viewing` reasons when their current causal rules hold. Avoiding terminal `end_time_exceeded` yields `lateIssuesAvoided = 1` and `maximumLateByMinutesAvoided = exceededByMinutes`. Open and fixed-no-travel states contain no terminal taxi evidence. No new `ReasonCode` is introduced.
+- **Matrix and gap behavior:** Open End requests no terminal matrix pair and day-end gap insertion reserves no onward terminal travel. Fixed End requests every necessary directed property-location-to-destination pair whose IDs differ, with deterministic exact-pair deduplication, no reverse inference, and no fabricated zero duration. Fixed day-end insertion reserves caller-supplied candidate-to-destination lower-bound travel unless the canonical same-location rule applies. CE-10 remains provider- and matrix-independent.
+- **Mode-space behavior:** Property transport modes remain property-aligned. Open and fixed-no-travel add no terminal transport choice. Ordinary Fixed End enumerates legal terminal transit/taxi modes. For a given property-mode combination, same-location Fixed End produces one terminal state rather than duplicate transit/taxi candidates.
+- **Identity:** Candidate ID and CE-15 exact-route deduplication must distinguish Open versus Fixed, fixed-no-travel versus Open, different Fixed End destinations, and terminal transit versus terminal taxi. CE-14's seven-field hierarchy is unchanged.
+- **Likely ownership:** `src/lib/route/types.ts`, `src/lib/route/validateDayRouteInput.ts`, `src/lib/travel/buildTravelMatrix.ts`, `src/lib/route/simulateTimeline.ts`, `src/lib/route/evaluateConstraints.ts`, `src/lib/route/search/gapInsertion.ts`, `src/lib/route/calculateRisk.ts`, `src/lib/route/search/enumerateModes.ts`, `src/lib/route/evaluateTaxiValue.ts`, `src/lib/route/extractRouteOptions.ts`, `src/lib/route/optimizeDayRoute.ts`, and focused tests/fixtures identified during implementation review.
+- **Engineering-shape recommendations, not implemented contracts:** Prefer an explicit discriminated end-policy union rather than optional/undefined semantics, and explicit resolved-terminal, terminal-selection, and route-completion unions rather than fake modes or ambiguous nullability. `DayRouteEndPolicy`, `ResolvedRouteTerminal`, `RouteTerminalSelection`, `RouteCompletion`, a possible `resolveDayRouteEnd.ts`, and retention of `estimatedEndAt` as a compatibility mirror are recommended names/shapes only until implementation review accepts exact TypeScript contracts.
+- **Deterministic acceptance:** The 28 CE-16.1 Open/Fixed End intent groups in `docs/TEST_CASES.md`, including Open, ordinary Fixed, same-location Fixed, matrix/failure/overflow, identity, immutability, repeatability, and full CE-16 regression after explicit Open migration.
+- **Decision Gates:** Gate B and Gate D are USER-RESOLVED as recorded below. CE-16.1 does not resolve or depend on Gate E or Gate I and changes none of Gates A, C, F, G, H, or J.
+- **Definition of done:** Exact source contracts are reviewed before implementation; all 28 intent groups receive deterministic tests; existing CE-16 acceptance remains passing after explicit migration; no provider call enters the route engine; full tests, lint, TypeScript checking, `git diff --check`, and external review pass; the milestone is explicitly accepted before CE-17 begins.
+- **Non-goals:** CE-17 or multi-day source contracts; Day Assignment; whole-plan budget implementation; resolving Gate E or Gate I; changing CE-14 ranking; new risk thresholds/weights or reason codes; UI defaults; maps/providers; LocalStorage; rerouting; Plan B; or cross-day/overnight movement.
+
 ### CE-17 — Multi-day input, eligible-day derivation, and validation
 
-- **Status:** NEXT
-- **Prerequisites:** CE-16 and resolution of contract-blocking Gates B, D, E, and I as applicable.
+- **Status:** BLOCKED.
+- **Prerequisites:** Committed CE-16.1 contract closure; completed and accepted CE-16.1 implementation; and explicit resolution of contract-blocking Gates E and I. Gates B and D are already USER-RESOLVED.
 - **Goal:** Define multi-day source contracts and pure rules for available dates, eligibility, and validation.
-- **Scope:** Available-date collection, per-date availability, optional maximum-active-day/finish-by constraints, eligible-day derivation, fixed/limited/flexible rules, unavailable-fixed-date conflict, multi-day result foundations.
+- **Scope:** Available-date collection; per-date date, earliest/latest bounds, origin, and Open/Fixed End policy; plan-level shared transport strategy, fixed-appointment buffer, route preferences, and whole-plan taxi budget; optional maximum-active-day/finish-by constraints; eligible-day derivation; fixed/limited/flexible rules; unavailable-fixed-date conflict; and multi-day result foundations. No Day N end-to-Day N+1 origin continuity or overnight movement is introduced.
 - **Likely ownership:** `src/lib/plan/types.ts`, `src/lib/plan/deriveEligibleDays.ts`, `src/lib/plan/validatePlanInput.ts`, `test/plan/*`.
 - **Deterministic tests:** Empty/duplicate/non-consecutive dates, fixed date included/absent, limited/flexible eligibility, daily availability, no invented dates.
 - **Mapped TEST_CASES:** Cases 18, 22, 24, 25 foundations.
-- **Decision Gates:** B (budget contract), D (per-date settings), E (undated unconfirmed eligibility), I (result invariant) must be resolved before affected contracts are finalized.
-- **Definition of done:** Concrete contracts reflect only closed policies; active/eligible dates can only derive from supplied dates; current daily contracts remain unchanged; all checks pass.
+- **Decision Gates:** Gate E (undated unconfirmed eligibility) and Gate I (result invariant) remain UNRESOLVED and block affected contracts. Gate B and Gate D are USER-RESOLVED inputs to this milestone.
+- **Definition of done:** Concrete contracts reflect only closed policies; active/eligible dates can only derive from supplied dates; the accepted CE-16.1 Daily Route contract is reused rather than reimplemented; all checks pass.
 - **Non-goals:** Assignment search, daily route reimplementation, whole-plan ranking, UI.
 - **Future-scale notes:** Date collections are not fixed three-element tuples.
 
@@ -968,7 +1006,7 @@ Assignment, route search, simulation, or ranking.
 - **Likely ownership:** `src/lib/plan/assemblePlan.ts`, `src/lib/plan/aggregatePlanMetrics.ts`, integrated plan tests.
 - **Deterministic tests:** Stable daily call set/order, non-consecutive dates, per-day monotonicity, exact aggregate totals, fixed appointments retained.
 - **Mapped TEST_CASES:** Cases 18–24.
-- **Decision Gates:** F (risk aggregation) and G (whole-plan option topology) must close before affected output/aggregation behavior is finalized; B may affect taxi aggregation.
+- **Decision Gates:** F (risk aggregation) and G (whole-plan option topology) must close before affected output/aggregation behavior is finalized. Gate B is USER-RESOLVED: taxi spend aggregates against one shared whole-plan budget, not an independent full cap per day.
 - **Definition of done:** No provider calls; daily optimizer remains the only daily-route engine; aggregate metrics have one source of truth; all checks pass.
 - **Non-goals:** Whole-plan ranking policy, UI, cross-day rerouting.
 - **Future-scale notes:** Assembly is independent from assignment strategy.
@@ -976,13 +1014,13 @@ Assignment, route search, simulation, or ranking.
 ### CE-20 — Multi-day ranking and active-day constraints
 
 - **Status:** PLANNED
-- **Prerequisites:** CE-19 and closure of Gates A, B, F, G, H, and I where they affect final semantics.
+- **Prerequisites:** CE-19 and closure of Gates A, F, G, H, and I where they affect final semantics; Gate B is already USER-RESOLVED.
 - **Goal:** Compare whole-plan candidates and select active dates under confirmed constraints.
 - **Scope:** Whole-plan hierarchy, maximum-active-day and finish-by enforcement, deterministic tie handling, applicable taxi/risk aggregation, actionable partial/conflict ranking.
 - **Likely ownership:** `src/lib/plan/rankPlans.ts`, `src/lib/plan/evaluatePlanConstraints.ts`, focused tests.
 - **Deterministic tests:** Active-date subset, optional constraints, one-versus-multiple-day comparisons after Gate A, exact tie behavior after Gate H, no lower-level override.
 - **Mapped TEST_CASES:** Cases 19, 21, 23, 25 plus acceptance placeholders activated only after their gates close.
-- **Decision Gates:** A, B, F, G, H, I.
+- **Decision Gates:** A, F, G, H, I remain unresolved as applicable. Gate B is USER-RESOLVED and requires enforcement of one shared whole-plan taxi budget.
 - **Definition of done:** Only closed policies are encoded; hierarchy is explicit and not hidden in assignment search; all checks pass.
 - **Non-goals:** Integrated public API, UI, dynamic rerouting.
 - **Future-scale notes:** Ranking remains candidate-source independent.
@@ -1003,8 +1041,9 @@ Assignment, route search, simulation, or ranking.
 
 ## 7. Decision Gate register
 
-All gates below are **UNRESOLVED**. Documentation of alternatives is not a
-decision, and implementation must not silently choose one.
+Each gate records its own status. A USER-RESOLVED gate is an approved product
+decision but is not proof that source implementation exists. UNRESOLVED gates
+must not be silently chosen by implementation.
 
 ### Gate A — One-day high-risk versus two-day lower-risk recommendation
 
@@ -1016,9 +1055,9 @@ decision, and implementation must not silently choose one.
 ### Gate B — Multi-day taxi-budget scope
 
 - **Question:** Is taxi budget one shared whole-plan budget or a separate budget for each day?
-- **Why deferred:** Either choice changes multi-day contracts, aggregation, and feasibility.
-- **Must resolve before:** Affected CE-17 contracts and CE-20 ranking behavior are finalized.
-- **Status:** UNRESOLVED.
+- **User-resolved decision:** One `taxiBudget` is shared by the whole Multi-day Plan. It must not be interpreted as a full independent cap available again on every day.
+- **Implementation consequence:** CE-17 must place the budget at plan level; later plan assembly/constraint work must aggregate Daily Route taxi spend against that shared budget. Existing CE-13 Daily Route budget behavior remains accepted source behavior until the reviewed multi-day orchestration contract is implemented.
+- **Status:** USER-RESOLVED; source implementation belongs to CE-17 through CE-20 and has not started.
 
 ### Gate C — Search crossover for larger plans
 
@@ -1030,9 +1069,9 @@ decision, and implementation must not silently choose one.
 ### Gate D — Per-date settings beyond availability
 
 - **Question:** Does each date contain only date/start/end availability, or may origin, transport strategy, buffer, taxi settings, and preferences also vary by date?
-- **Why deferred:** The approved architecture confirms per-date availability but not the ownership of other settings.
-- **Must resolve before:** CE-17 contracts are finalized.
-- **Status:** UNRESOLVED.
+- **User-resolved decision:** Each available date owns `date`, `earliestStart`, `latestEnd`, `originLocationId`, and an Open/Fixed End policy. `transportStrategy`, `fixedAppointmentBufferMinutes`, and `routePreferences` are plan-level shared. Gate B separately places `taxiBudget` at whole-plan level.
+- **Continuity boundary:** A day ending Open or at a Fixed destination does not constrain the next day's origin. Overnight movement is not simulated.
+- **Status:** USER-RESOLVED; concrete multi-day TypeScript contracts wait for CE-17 after CE-16.1 and Gates E/I.
 
 ### Gate E — Unconfirmed-property date eligibility
 
@@ -1097,6 +1136,7 @@ decision, and implementation must not silently choose one.
 | 15 | DEFERRED | Post-CE-21 Plan B plan | Not current Core Engine acceptance |
 | 16 | Current V0.1A | CE-05, CE-06, CE-08, CE-16 | Missing/degraded travel data |
 | 17 | Current V0.1A | CE-04, CE-16 | One-property daily input is valid |
+| CE-16.1 Open/Fixed End groups | Current V0.1A extension | CE-16.1 | 28 intent groups covering Open, ordinary Fixed, canonical fixed-no-travel, completion/latest-end, terminal matrix/mode/risk/taxi behavior, identity, failures, overflow, determinism, immutability, and CE-16 regression |
 | 18 | Current multi-day | CE-17, CE-18, CE-19, CE-21 | Cross-date fixed appointments succeed |
 | 19 | Current multi-day | CE-18, CE-19, CE-20, CE-21 | Flexible property chooses better eligible day |
 | 20 | Current multi-day | CE-18, CE-19, CE-21 | Move flexible property to Day 2 |
@@ -1106,8 +1146,9 @@ decision, and implementation must not silently choose one.
 | 24 | Current multi-day | CE-17, CE-19, CE-21 | Different per-date availability |
 | 25 | Current multi-day | CE-17, CE-20, CE-21 | One date infeasible; no invented date; Gate I controls status |
 
-Decision-Gate acceptance placeholders in `TEST_CASES.md` do not enter passing
-criteria until their gates close.
+Unresolved Decision-Gate acceptance placeholders in `TEST_CASES.md` do not
+enter passing criteria until their gates close. Gate B's resolved shared-budget
+scenario remains future multi-day acceptance rather than current source behavior.
 
 ## 9. Future-scale considerations
 
